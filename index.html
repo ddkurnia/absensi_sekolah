@@ -71,12 +71,26 @@
         @keyframes toastIn { from { opacity:0; transform:translateY(-20px); } to { opacity:1; transform:translateY(0); } }
         @keyframes toastOut { from { opacity:1; } to { opacity:0; transform:translateY(-20px); } }
         
+        /* Print area: posisi di luar layar tapi TIDAK display:none 
+           (JsBarcode butuh elemen visible agar bisa merender SVG) */
+        #print-area { 
+            position: fixed; left: -9999px; top: 0; width: 100%; 
+            background: white; z-index: -1;
+        }
+
         @media print {
-            body { background: white !important; }
-            #sidebar, header, button, .no-print, #offlineBanner, #toastContainer { display: none !important; }
-            #print-area { display: block !important; width: 100%; margin: 0; padding: 0; }
+            body * { visibility: hidden !important; }
+            body { background: white !important; overflow: visible !important; }
+            main, #print-area, #print-area * { 
+                visibility: visible !important; 
+                overflow: visible !important;
+            }
+            #print-area { 
+                position: static !important; left: auto !important; top: auto !important;
+                display: block !important; width: 100%; margin: 0; padding: 20px; z-index: 9999 !important;
+            }
             .print-page-break { page-break-after: always; }
-            main { overflow: visible !important; }
+            .no-print { display: none !important; }
         }
     </style>
 </head>
@@ -775,7 +789,7 @@
         </div>
 
         <!-- ====== PRINT AREA ====== -->
-        <div id="print-area" class="hidden bg-white p-8">
+        <div id="print-area" class="bg-white p-8">
             <div class="text-center mb-8 border-b-2 border-slate-800 pb-4">
                 <h1 class="text-2xl font-black uppercase" id="printSchoolName">KARTU ABSENSI</h1>
                 <p class="text-sm text-slate-500" id="printSchoolAddr"></p>
