@@ -1205,21 +1205,51 @@ window.exportRekap = function() {
     showToast('File rekap berhasil diekspor!');
 };
 
-// ===== 21. BARCODE =====
+// ===== 21. BARCODE (FIX: render ke canvas → image, agar cetak selalu muncul) =====
+
+// Helper: render barcode ke canvas tersembunyi, kembalikan data URL gambar
+function renderBarcodeToImage(nis, options) {
+    const canvas = document.createElement('canvas');
+    const id = 'bc-canvas-' + Date.now() + Math.random().toString(36).substr(2,4);
+    canvas.id = id;
+    canvas.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
+    document.body.appendChild(canvas);
+    
+    try {
+        JsBarcode('#' + id, nis, { format:"CODE128", ...options });
+        const imgDataUrl = canvas.toDataURL('image/png');
+        return imgDataUrl;
+    } catch(e) {
+        console.error('Barcode render error:', e);
+        return null;
+    } finally {
+        canvas.remove();
+    }
+}
+
 window.showSingleBarcode = function(nis, nama, kelas) {
+    // 1. Render barcode di modal (SVG, untuk tampilan)
     document.getElementById('modalStudentName').innerText = nama;
     document.getElementById('modalStudentClass').innerText = 'Kelas ' + kelas;
     JsBarcode("#singleBarcode", nis, { format:"CODE128", width:3, height:80, displayValue:true, fontSize:14 });
     document.getElementById('barcodeModal').classList.remove('hidden');
     
+    // 2. Render barcode ke canvas → image, lalu taruh di print-area (agar cetak pasti muncul)
+    const barcodeImg = renderBarcodeToImage(nis, { width:2, height:60, displayValue:true, fontSize:14 });
+    
     document.getElementById('massBarcodeContainer').innerHTML = `
-        <div class="text-center p-6 border-2 border-slate-800 rounded-xl w-80 mx-auto mb-4">
+        <div class="text-center p-6 border-2 border-slate-800 rounded-xl w-80 mx-auto mb-4 print-card">
+            <p class="text-xs text-slate-500 mb-1" style="font-size:10px;">KARTU ABSENSI SISWA</p>
             <h3 class="font-bold text-lg">${nama}</h3>
-            <p class="text-sm mb-2">Kelas: ${kelas}</p>
-            <p class="text-xs text-slate-500 mb-4">NIS: ${nis}</p>
-            <svg id="printSingle"></svg>
+            <p class="text-sm mb-1">Kelas: ${kelas}</p>
+            <p class="text-xs text-slate-500 mb-4" style="font-size:11px;">NIS: ${nis}</p>
+            ${barcodeImg ? `<img src="${barcodeImg}" style="width:250px;height:auto;" />` : `<svg id="printSingle"></svg>`}
         </div>`;
-    JsBarcode("#printSingle", nis, { width:2, height:60, displayValue:true });
+    
+    // Fallback SVG jika canvas gagal
+    if(!barcodeImg) {
+        try { JsBarcode("#printSingle", nis, { width:2, height:60, displayValue:true }); } catch(e) {}
+    }
 };
 
 window.printBarcodePerClass = function() {
@@ -1228,12 +1258,29 @@ window.printBarcodePerClass = function() {
     const siswaList = getSiswa().filter(s => s.kelasId === selectedClass && s.aktif);
     if(siswaList.length === 0) return showToast('Tidak ada siswa aktif di kelas ini!', 'warning');
     
-    const profile = getProfile();
+    // Render semua barcode ke canvas → image
     let html = '';
     siswaList.forEach((s, i) => {
-        html += `<div class="text-center p-4 border-2 border-slate-800 rounded-xl mb-4"><h3 class="font-bold text-lg">${s.nama}</h3><p class="text-sm font-semibold">Kelas: ${s.kelasNama}</p><p class="text-xs text-slate-500 mb-3">NIS: ${s.nis}</p><svg id="mb-${i}"></svg></div>`;
+        const barcodeImg = renderBarcodeToImage(s.nis, { width:2, height:50, displayValue:true, fontSize:12 });
+        html += `<div class="text-center p-4 border-2 border-slate-800 rounded-xl mb-4 print-card">
+            <p class="text-xs text-slate-500 mb-1" style="font-size:10px;">KARTU ABSENSI SISWA</p>
+            <h3 class="font-bold text-base">${s.nama}</h3>
+            <p class="text-xs font-semibold" style="font-size:12px;">Kelas: ${s.kelasNama}</p>
+            <p class="text-xs text-slate-500 mb-3" style="font-size:10px;">NIS: ${s.nis}</p>
+            ${barcodeImg ? `<img src="${barcodeImg}" style="width:220px;height:auto;" />` : `<svg id="mb-${i}"></svg>`}
+        </div>`;
     });
+    
     document.getElementById('massBarcodeContainer').innerHTML = html;
-    siswaList.forEach((s, i) => JsBarcode(`#mb-${i}`, s.nis, { width:2, height:60, displayValue:true }));
-    window.print();
+    
+    // Fallback SVG jika canvas gagal
+    siswaList.forEach((s, i) => {
+        const svgEl = document.getElementById('mb-' + i);
+        if(svgEl && svgEl.innerHTML === '') {
+            try { JsBarcode(svgEl, s.nis, { width:2, height:50, displayValue:true }); } catch(e) {}
+        }
+    });
+    
+    // Tunggu rendering selesai, lalu cetak
+    setTimeout(() => window.print(), 200);
 };
