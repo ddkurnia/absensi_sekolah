@@ -1,19 +1,19 @@
 {
   "name": "Smart Absen Enterprise",
   "short_name": "SmartAbsen",
-  "description": "Sistem Absensi Sekolah PWA dengan RFID dan Barcode",
+  "description": "Sistem Absensi Sekolah PWA Profesional dengan RFID dan Barcode",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#2563eb",
+  "background_color": "#0f766e",
+  "theme_color": "#0d9488",
   "icons": [
     {
-      "src": "https://ui-avatars.com/api/?name=SA&background=2563eb&color=fff&size=192",
+      "src": "https://ui-avatars.com/api/?name=SA&background=0d9488&color=fff&size=192&bold=true",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://ui-avatars.com/api/?name=SA&background=2563eb&color=fff&size=512",
+      "src": "https://ui-avatars.com/api/?name=SA&background=0d9488&color=fff&size=512&bold=true",
       "sizes": "512x512",
       "type": "image/png"
     }
