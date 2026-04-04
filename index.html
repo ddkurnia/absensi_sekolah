@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Absen Enterprise</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1e293b">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
+    <style>
+        .glass-card { background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.3); }
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        #scannerInput:focus { outline: none; }
+        
+        @media print {
+            body { background: white; }
+            #sidebar, header, button, .no-print, #offlineBanner { display: none !important; }
+            #print-area { display: block !important; width: 100%; margin: 0; padding: 0; }
+            .print-page-break { page-break-after: always; }
+            main { overflow: visible !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans h-screen flex overflow-hidden">
+
+    <div id="offlineBanner" class="hidden fixed top-0 left-0 w-full bg-red-600 text-white text-center py-2 z-[100] font-bold text-sm shadow-md flex justify-center items-center">
+        <i class="fa-solid fa-wifi-slash mr-2"></i> INTERNET TERPUTUS! Mode Offline Aktif. Data scan tersimpan lokal.
+        <button onclick="syncData()" id="btnSync" class="ml-4 bg-white text-red-600 px-3 py-1 rounded text-xs hover:bg-slate-100 hidden">Sinkronisasi Sekarang</button>
+    </div>
+
+    <aside id="sidebar" class="w-64 bg-slate-900 text-white flex flex-col hidden z-50 transition-all no-print">
+        <div class="p-6 text-center border-b border-slate-800 pt-10">
+            <img id="sidebarLogo" src="https://ui-avatars.com/api/?name=School&background=3b82f6&color=fff" class="w-20 h-20 rounded-full mx-auto mb-3 object-cover border-2 border-slate-600">
+            <h2 id="sidebarSchoolName" class="text-lg font-bold uppercase tracking-wider">SMART ABSEN</h2>
+            <p id="userRoleBadge" class="text-xs mt-1 px-2 py-1 rounded-full inline-block font-bold">Role</p>
+        </div>
+        <nav class="flex-1 p-4 overflow-y-auto hide-scroll">
+            <ul class="space-y-2" id="navMenu"></ul>
+        </nav>
+        <div class="p-4 border-t border-slate-800">
+            <button onclick="location.reload()" class="w-full flex items-center justify-center p-3 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition"><i class="fa-solid fa-power-off mr-2"></i> Keluar</button>
+        </div>
+    </aside>
+
+    <main class="flex-1 relative h-full bg-slate-50 overflow-y-auto">
+        <div id="login-page" class="flex items-center justify-center h-full bg-slate-800 relative">
+            <div class="absolute inset-0 bg-cover bg-center opacity-40" style="background-image: url('https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2070');"></div>
+            <div class="glass-card p-10 rounded-3xl w-full max-w-md shadow-2xl relative z-10 text-white text-center border border-white/20">
+                <i class="fa-solid fa-fingerprint text-6xl mb-4 text-blue-400"></i>
+                <h2 class="text-3xl font-bold mb-8">Portal Pegawai</h2>
+                <div class="space-y-4">
+                    <select id="loginRole" class="w-full p-4 rounded-xl bg-slate-900/50 border border-slate-600 text-white focus:ring-2 focus:ring-blue-400 [&>option]:text-slate-900">
+                        <option value="admin">Administrator (Full Akses)</option>
+                        <option value="piket">Guru Piket (Hanya Scan)</option>
+                        <option value="wali">Wali Kelas (Data Siswa)</option>
+                    </select>
+                    <input type="password" id="adminPassword" placeholder="Kata Sandi (Isi: 123)" class="w-full p-4 rounded-xl bg-slate-900/50 border border-slate-600 text-white focus:ring-2 focus:ring-blue-400">
+                    <button id="btnLogin" class="w-full p-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold transition shadow-lg text-lg">Masuk Sistem</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboard-page" class="hidden p-8 pt-12 h-full">
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="text-3xl font-bold text-slate-800">Dashboard & Rekap</h1>
+                <button onclick="exportToDapodik()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-bold shadow-md transition flex items-center">
+                    <i class="fa-solid fa-file-excel mr-2"></i> Ekspor Dapodik
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-blue-500"><p class="text-slate-500 text-sm font-bold">TOTAL HADIR</p><h3 class="text-3xl font-black text-slate-800" id="dashTotal">0</h3></div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-green-500"><p class="text-slate-500 text-sm font-bold">TEPAT WAKTU</p><h3 class="text-3xl font-black text-slate-800" id="dashTepat">0</h3></div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-yellow-500"><p class="text-slate-500 text-sm font-bold">TERLAMBAT</p><h3 class="text-3xl font-black text-slate-800" id="dashTelat">0</h3></div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-purple-500"><p class="text-slate-500 text-sm font-bold">SUDAH PULANG</p><h3 class="text-3xl font-black text-slate-800" id="dashPulang">0</h3></div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-100 text-slate-600"><tr class="text-sm uppercase"><th class="p-4">Waktu</th><th class="p-4">Nama Siswa</th><th class="p-4">Status</th></tr></thead>
+                    <tbody id="recentLogs" class="text-sm text-slate-700"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="scan-page" class="hidden h-full flex flex-col items-center justify-center bg-slate-900 relative">
+            <input type="text" id="scannerInput" class="opacity-0 absolute -z-10" autocomplete="off" autofocus>
+            <div class="z-10 text-center">
+                <div class="inline-block bg-slate-800/80 p-12 rounded-[3rem] border border-slate-700 shadow-2xl relative">
+                    <i class="fa-solid fa-id-card text-8xl text-blue-500 mb-6 drop-shadow-lg"></i>
+                    <h1 class="text-4xl font-black text-white mb-2">TAP KARTU / SCAN</h1>
+                    <p class="text-2xl text-yellow-400 font-mono font-bold mt-4" id="clockDisplay">00:00:00 WIB</p>
+                </div>
+                <div id="scanResult" class="hidden mt-8">
+                    <div class="bg-white rounded-2xl p-6 flex items-center max-w-lg mx-auto shadow-2xl scale-105 transition-transform">
+                        <div class="text-center w-full">
+                            <h3 id="studentName" class="text-3xl font-bold text-slate-800 mb-2">Nama Siswa</h3>
+                            <span id="scanBadge" class="px-6 py-2 rounded-full text-lg font-bold bg-green-100 text-green-700">HADIR</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="students-page" class="hidden p-8 pt-12 h-full">
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="text-3xl font-bold text-slate-800">Master Data & Barcode</h1>
+                <div class="space-x-2">
+                    <select id="filterKelas" class="p-2 border border-slate-300 rounded-lg">
+                        <option value="10-A">Kelas 10-A</option>
+                        <option value="10-B">Kelas 10-B</option>
+                    </select>
+                    <button onclick="printBarcodePerClass()" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg"><i class="fa-solid fa-print mr-2"></i>Cetak Barcode Kelas Ini</button>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-100 text-slate-600"><tr class="text-sm"><th class="p-4">NIS</th><th class="p-4">Nama</th><th class="p-4">Kelas</th><th class="p-4">Aksi</th></tr></thead>
+                    <tbody id="tableDataSiswa" class="text-sm">
+                        <tr class="border-b"><td class="p-4 font-mono">101122</td><td class="p-4 font-bold">Ahmad Budi</td><td class="p-4">10-A</td><td class="p-4"><button onclick="showSingleBarcode('101122', 'Ahmad Budi', '10-A')" class="bg-blue-100 text-blue-600 px-3 py-1 rounded">Lihat Barcode</button></td></tr>
+                        <tr class="border-b"><td class="p-4 font-mono">101123</td><td class="p-4 font-bold">Siti Aisyah</td><td class="p-4">10-B</td><td class="p-4"><button onclick="showSingleBarcode('101123', 'Siti Aisyah', '10-B')" class="bg-blue-100 text-blue-600 px-3 py-1 rounded">Lihat Barcode</button></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="barcodeModal" class="hidden fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center no-print">
+            <div class="bg-white p-8 rounded-2xl text-center shadow-2xl relative">
+                <button onclick="document.getElementById('barcodeModal').classList.add('hidden')" class="absolute top-4 right-4 text-slate-400 hover:text-red-500"><i class="fa-solid fa-times text-xl"></i></button>
+                <h3 id="modalStudentName" class="text-2xl font-bold mb-1">Nama Siswa</h3>
+                <p id="modalStudentClass" class="text-slate-500 mb-6">Kelas</p>
+                <div class="bg-white p-4 border-2 border-dashed border-slate-300 rounded-xl inline-block mb-4">
+                    <svg id="singleBarcode"></svg>
+                </div>
+                <button onclick="window.print()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold"><i class="fa-solid fa-print mr-2"></i> Cetak Kartu</button>
+            </div>
+        </div>
+
+        <div id="settings-page" class="hidden p-8 pt-12 h-full overflow-y-auto">
+            <h1 class="text-3xl font-bold text-slate-800 mb-8">Pengaturan Sistem & WA</h1>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-xl font-bold mb-4 border-b pb-2"><i class="fa-solid fa-clock text-blue-500 mr-2"></i> Aturan Waktu</h3>
+                    <div class="space-y-4">
+                        <div><label class="block text-sm font-bold text-slate-600">Batas Terlambat</label><input type="time" id="timeLate" class="w-full p-2 border rounded mt-1"></div>
+                        <div><label class="block text-sm font-bold text-slate-600">Mulai Pulang</label><input type="time" id="timeOut" class="w-full p-2 border rounded mt-1"></div>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-xl font-bold mb-4 border-b pb-2"><i class="fa-brands fa-whatsapp text-green-500 mr-2"></i> Template Pesan</h3>
+                    <div class="space-y-4">
+                        <div><label class="block text-sm font-bold text-green-600">Pesan Masuk</label><textarea id="waMasuk" rows="2" class="w-full p-2 border rounded text-sm mt-1"></textarea></div>
+                        <div><label class="block text-sm font-bold text-yellow-600">Pesan Terlambat</label><textarea id="waTelat" rows="2" class="w-full p-2 border rounded text-sm mt-1"></textarea></div>
+                    </div>
+                </div>
+            </div>
+            <button onclick="saveSettings()" class="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg w-full md:w-auto"><i class="fa-solid fa-save mr-2"></i> Simpan Pengaturan</button>
+        </div>
+
+        <div id="profile-page" class="hidden p-8 pt-12 h-full">
+            <h1 class="text-3xl font-bold text-slate-800 mb-8">Profil Institusi</h1>
+            <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 max-w-xl">
+                <div class="flex items-center space-x-6 mb-6">
+                    <img id="previewLogo" src="" class="w-24 h-24 rounded-xl border object-cover">
+                    <div class="flex-1">
+                        <label class="block text-sm font-bold text-slate-600 mb-2">Upload Logo (PNG/JPG)</label>
+                        <input type="file" id="uploadLogo" accept="image/*" class="w-full text-sm border p-2 rounded">
+                    </div>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-bold text-slate-600 mb-2">Nama Instansi / Sekolah</label>
+                    <input type="text" id="inputSchoolName" class="w-full p-3 rounded-lg border focus:ring-2 focus:ring-blue-400">
+                </div>
+                <button onclick="saveProfile()" class="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold w-full"><i class="fa-solid fa-save mr-2"></i> Simpan Profil</button>
+            </div>
+        </div>
+
+        <div id="print-area" class="hidden bg-white p-8">
+            <div class="text-center mb-8 border-b-2 border-black pb-4">
+                <h1 class="text-3xl font-black uppercase" id="printSchoolName">KARTU ABSENSI</h1>
+            </div>
+            <div id="massBarcodeContainer" class="grid grid-cols-2 gap-8"></div>
+        </div>
+
+    </main>
+    <script src="app.js"></script>
+</body>
+</html>
