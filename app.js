@@ -123,7 +123,13 @@ const menuConfig = {
     ]
 };
 
-// ===== 6. LOGIN =====
+// ===== 6. LOGIN & REGISTRASI =====
+// PENTING: seed data dipanggil SEBELUM login agar data pengguna tersedia
+if(getKelas().length === 0) seedDemoData();
+
+// Cek apakah ini pertama kali dijalankan
+checkFirstRun();
+
 document.getElementById('btnLogin').addEventListener('click', doLogin);
 document.getElementById('adminPassword').addEventListener('keypress', e => { if(e.key==='Enter') doLogin(); });
 
@@ -132,20 +138,30 @@ function doLogin() {
     const pass = document.getElementById('adminPassword').value;
     const role = document.getElementById('loginRole').value;
     
+    if(!nip) return showToast('NIP / ID Pegawai wajib diisi!', 'warning');
+    if(!pass) return showToast('Kata sandi wajib diisi!', 'warning');
+    
     // Cek pengguna terdaftar
     const penggunaList = getPengguna();
     let user = penggunaList.find(u => u.nip === nip);
     
     if (user) {
+        // User ditemukan di database lokal
+        if(!user.password && user.password !== '') {
+            // User lama tanpa password, set default
+            user.password = '123456';
+            setPengguna(penggunaList);
+        }
         if (user.password !== pass) return showToast('Kata sandi salah!', 'error');
-        if (user.role !== role) return showToast('Jabatan tidak sesuai dengan NIP!', 'error');
+        if (user.aktif === false) return showToast('Akun dinonaktifkan. Hubungi administrator.', 'error');
+        // Role check: admin bisa login ke role apapun untuk testing
+        if (user.role !== role && role !== 'admin') return showToast('Jabatan tidak sesuai dengan NIP! Pilih: ' + roleLabels[user.role], 'error');
         currentUser = user;
         currentUserRole = user.role;
     } else {
-        // Login default untuk demo
-        if (pass !== '123456') return showToast('Kata sandi salah! Default: 123456', 'error');
-        currentUser = { id: genId(), nama: roleLabels[role], nip: nip || role.toUpperCase(), role: role, telepon: '', email: '' };
-        currentUserRole = role;
+        // Tidak ditemukan — cek apakah ini akun dari Google Sheets (SaaS)
+        showToast('NIP tidak terdaftar di sistem lokal.', 'error');
+        return;
     }
     
     setData('currentUser', currentUser);
@@ -183,6 +199,70 @@ function logout() {
     location.reload();
 }
 
+// ===== 6b. REGISTRASI ADMIN SEKOLAH BARU =====
+function toggleRegisterForm() {
+    const form = document.getElementById('registerForm');
+    if(form) {
+        form.classList.toggle('hidden');
+        document.getElementById('btnShowRegister').classList.toggle('hidden');
+    }
+}
+
+window.doRegister = function() {
+    const nama = document.getElementById('regNama').value.trim();
+    const nip = document.getElementById('regNip').value.trim();
+    const pass = document.getElementById('regPassword').value;
+    const pass2 = document.getElementById('regPassword2').value;
+    const sekolah = document.getElementById('regSekolah').value.trim();
+    const telp = document.getElementById('regTelp').value.trim();
+    
+    if(!nama) return showToast('Nama lengkap wajib diisi!', 'warning');
+    if(!nip) return showToast('NIP wajib diisi!', 'warning');
+    if(nip.length < 3) return showToast('NIP minimal 3 karakter!', 'warning');
+    if(!pass) return showToast('Kata sandi wajib diisi!', 'warning');
+    if(pass.length < 4) return showToast('Kata sandi minimal 4 karakter!', 'warning');
+    if(pass !== pass2) return showToast('Kata sandi tidak cocok!', 'error');
+    
+    const penggunaList = getPengguna();
+    
+    // Cek duplikat NIP
+    if(penggunaList.find(u => u.nip === nip)) return showToast('NIP sudah terdaftar! Gunakan NIP lain.', 'error');
+    
+    // Buat akun admin baru
+    const newAdmin = {
+        id: genId(), nama: nama, nip: nip, role: 'admin',
+        telepon: telp, email: '', password: pass, aktif: true,
+        sekolah: sekolah
+    };
+    
+    penggunaList.push(newAdmin);
+    setPengguna(penggunaList);
+    setGuru(penggunaList);
+    
+    // Update nama sekolah jika diisi
+    if(sekolah) {
+        const p = getProfile();
+        p.name = sekolah;
+        setData('appProfile', p);
+    }
+    
+    showToast('Registrasi berhasil! Silakan login dengan NIP: ' + nip, 'success');
+    
+    // Auto-fill login form
+    document.getElementById('loginNip').value = nip;
+    document.getElementById('adminPassword').value = pass;
+    toggleRegisterForm();
+};
+
+function checkFirstRun() {
+    const registered = localStorage.getItem('appRegistered');
+    if(!registered) {
+        // Tampilkan hint registrasi
+        const hint = document.getElementById('registerHint');
+        if(hint) hint.classList.remove('hidden');
+    }
+}
+
 // ===== 7. PAGE NAVIGATION =====
 function showPage(id) {
     allPages.forEach(p => { const el = document.getElementById(p); if(el) el.classList.add('hidden'); });
@@ -213,9 +293,6 @@ function initSystem() {
     updateDashboardUI();
     setInterval(updateClock, 1000);
     updateClock();
-    
-    // Seed demo data jika kosong
-    if(getKelas().length === 0) seedDemoData();
 }
 
 function updateClock() {
