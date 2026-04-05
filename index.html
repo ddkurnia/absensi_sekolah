@@ -78,20 +78,26 @@
             background: white; z-index: -1;
         }
 
-        @media print {
+                @media print {
             body * { visibility: hidden !important; }
-            body { background: white !important; overflow: visible !important; }
-            main, #print-area, #print-area * { 
+            /* Memastikan body dan html tidak membatasi area cetak */
+            body, html { background: white !important; height: auto !important; overflow: visible !important; }
+            main { height: auto !important; overflow: visible !important; visibility: visible !important; position: static !important; }
+            
+            #print-area, #print-area * { 
                 visibility: visible !important; 
                 overflow: visible !important;
             }
+            
+            /* Pindahkan area print ke pojok kiri atas saat di-print */
             #print-area { 
-                position: static !important; left: auto !important; top: auto !important;
+                position: absolute !important; left: 0 !important; top: 0 !important;
                 display: block !important; width: 100%; margin: 0; padding: 20px; z-index: 9999 !important;
             }
             .print-page-break { page-break-after: always; }
             .no-print { display: none !important; }
         }
+
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 h-screen flex overflow-hidden">
