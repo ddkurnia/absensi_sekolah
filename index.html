@@ -553,6 +553,27 @@
                     </button>
                 </div>
             </div>
+
+                        <div id="tab-database" class="settings-tab hidden">
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl shadow-lg border border-slate-700 mb-4 text-white">
+                    <h3 class="text-lg font-bold mb-4 flex items-center text-primary-400"><i class="fa-solid fa-server mr-2"></i> Integrasi Database Klien</h3>
+                    <p class="text-sm text-slate-300 mb-6">Masukkan URL Web App dari Google Apps Script milik sekolah di sini. Fitur ini memungkinkan 1 aplikasi dipakai banyak sekolah tanpa mengubah kode sumber.</p>
+                    
+                    <div class="space-y-5">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-300 mb-1.5">URL Web App (Google Apps Script) <span class="text-red-400">*</span></label>
+                            <input type="url" id="inputGasUrl" class="w-full p-3 rounded-xl bg-slate-900/50 border border-slate-600 text-white placeholder-slate-500 focus:ring-2 focus:ring-primary-400" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-300 mb-1.5">URL Sheet "Cetak Kartu" (Otomatisasi Barcode Google Sheets)</label>
+                            <input type="url" id="inputSheetCetakUrl" class="w-full p-3 rounded-xl bg-slate-900/50 border border-slate-600 text-white placeholder-slate-500 focus:ring-2 focus:ring-primary-400" placeholder="https://docs.google.com/spreadsheets/d/12345.../edit#gid=98765">
+                        </div>
+                    </div>
+                </div>
+                <button onclick="saveDatabaseConfig()" class="btn-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg text-sm">
+                    <i class="fa-solid fa-link mr-2"></i> Hubungkan Database
+                </button>
+            </div>
             
             <!-- Summary Stats -->
             <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4" id="rekapSummary"></div>
