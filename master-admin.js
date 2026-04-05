@@ -201,7 +201,7 @@ function showToast(message, type = 'success') {
 // ===== 7. PAGE NAVIGATION =====
 
 function showPage(id) {
-    const allPages = ['dashboard-page', 'registrations-page', 'schools-page', 'firebase-page', 'appconfig-page', 'activity-page'];
+    const allPages = ['dashboard-page', 'registrations-page', 'schools-page', 'wa-api-page', 'firebase-page', 'appconfig-page', 'activity-page'];
     allPages.forEach(p => { const el = document.getElementById(p); if (el) el.classList.add('hidden'); });
     const target = document.getElementById(id);
     if (target) { target.classList.remove('hidden'); target.classList.add('fade-in'); }
@@ -213,6 +213,7 @@ function showPage(id) {
     if (id === 'dashboard-page') updateDashboard();
     if (id === 'registrations-page') renderRegistrationsTable();
     if (id === 'schools-page') renderSchoolsTable();
+    if (id === 'wa-api-page') renderWaApiPage();
     if (id === 'firebase-page') updateFirebaseConnectionUI(firebaseReady);
     if (id === 'appconfig-page') loadAppConfigPage();
     if (id === 'activity-page') renderActivityLog();
@@ -581,6 +582,11 @@ function openEditSchoolModal(schoolId) {
     document.getElementById('editSchoolTelp').value = school.telp || '';
     document.getElementById('editSchoolGasUrl').value = school.gasUrl || '';
     document.getElementById('editSchoolSheetUrl').value = school.sheetUrl || '';
+    document.getElementById('editSchoolWaEnabled').checked = !!school.waEnabled;
+    document.getElementById('editSchoolWaProvider').value = school.waProvider || '';
+    document.getElementById('editSchoolWaApiKey').value = school.waApiKey || '';
+    document.getElementById('editSchoolWaSender').value = school.waSender || '';
+    document.getElementById('editSchoolWaWebhook').value = school.waWebhook || '';
     document.getElementById('editSchoolPassword').value = '';
     document.getElementById('editSchoolActive').checked = school.isActive !== false;
     document.getElementById('editSchoolTitle').textContent = school.sekolah || school.nama;
@@ -595,7 +601,12 @@ async function saveSchoolConfig() {
         telp: document.getElementById('editSchoolTelp').value.trim(),
         gasUrl: document.getElementById('editSchoolGasUrl').value.trim(),
         sheetUrl: document.getElementById('editSchoolSheetUrl').value.trim(),
-        isActive: document.getElementById('editSchoolActive').checked
+        isActive: document.getElementById('editSchoolActive').checked,
+        waEnabled: document.getElementById('editSchoolWaEnabled').checked,
+        waProvider: document.getElementById('editSchoolWaProvider').value,
+        waApiKey: document.getElementById('editSchoolWaApiKey').value.trim(),
+        waSender: document.getElementById('editSchoolWaSender').value.trim(),
+        waWebhook: document.getElementById('editSchoolWaWebhook').value.trim()
     };
 
     const newPassword = document.getElementById('editSchoolPassword').value.trim();
@@ -613,6 +624,167 @@ async function saveSchoolConfig() {
     } catch (e) {
         console.error('Save school config error:', e);
         showToast('Gagal menyimpan: ' + e.message, 'error');
+    }
+}
+
+// ===== 12. WHATSAPP API MANAGEMENT =====
+
+function renderWaApiPage() {
+    const cardsEl = document.getElementById('waApiCards');
+    const emptyEl = document.getElementById('emptyWaApi');
+    const search = (document.getElementById('searchWaApi') || {}).value || '';
+    const searchLower = search.toLowerCase();
+
+    let filtered = allSchools;
+    if (searchLower) {
+        filtered = filtered.filter(s =>
+            (s.sekolah || '').toLowerCase().includes(searchLower) ||
+            (s.nama || '').toLowerCase().includes(searchLower) ||
+            (s.nip || '').toLowerCase().includes(searchLower)
+        );
+    }
+
+    // Stats
+    const waConnected = allSchools.filter(s => s.waEnabled && s.waApiKey).length;
+    document.getElementById('statWaConnected').textContent = waConnected;
+    document.getElementById('statWaDisconnected').textContent = allSchools.length - waConnected;
+    document.getElementById('statWaTotal').textContent = allSchools.length;
+
+    if (filtered.length === 0) {
+        cardsEl.innerHTML = '';
+        emptyEl.classList.remove('hidden');
+        return;
+    }
+    emptyEl.classList.add('hidden');
+
+    cardsEl.innerHTML = filtered.map(s => {
+        const isActive = s.isActive !== false;
+        const waOn = !!s.waEnabled && !!s.waApiKey;
+        const provider = s.waProvider || '-';
+        const providerLabels = { fonnte: 'Fonnte', wablas: 'Wablas', zenziva: 'Zenziva', twilio: 'Twilio', custom: 'Custom API' };
+        const providerLabel = providerLabels[provider] || provider;
+        const maskedKey = s.waApiKey ? (s.waApiKey.substring(0, 6) + '••••••••') : '-';
+        const sender = s.waSender || '-';
+        const statusBg = waOn ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200';
+        const statusIcon = waOn ? 'fa-whatsapp text-green-600' : 'fa-plug text-slate-400';
+        const statusText = waOn ? '<span class="text-green-700 font-bold">Aktif</span>' : '<span class="text-slate-500">Belum dikonfigurasi</span>';
+
+        return `<div class="bg-white rounded-2xl shadow-sm border ${statusBg} p-5 fade-in">
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 ${waOn ? 'bg-green-100' : 'bg-slate-100'} rounded-xl flex items-center justify-center">
+                        <i class="fa-brands ${statusIcon} text-lg"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-slate-800">${escHtml(s.sekolah || '-')}</h4>
+                        <p class="text-xs text-slate-400">Admin: ${escHtml(s.nama || '-')} | NIP: ${escHtml(s.nip || '-')}</p>
+                    </div>
+                </div>
+                ${!isActive ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600">NON-AKTIF</span>' : ''}
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-4 text-xs">
+                <div class="bg-slate-50 rounded-lg p-2.5">
+                    <p class="text-slate-400 font-semibold">Status</p>
+                    <p>${statusText}</p>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-2.5">
+                    <p class="text-slate-400 font-semibold">Provider</p>
+                    <p class="font-semibold text-slate-700">${escHtml(providerLabel)}</p>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-2.5">
+                    <p class="text-slate-400 font-semibold">API Key</p>
+                    <p class="font-mono text-slate-600">${escHtml(maskedKey)}</p>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-2.5">
+                    <p class="text-slate-400 font-semibold">Sender</p>
+                    <p class="font-mono text-slate-600">${escHtml(sender)}</p>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="openEditWaApiModal('${s.id}')" class="flex-1 ${waOn ? 'btn-primary' : 'btn-success'} text-white px-3 py-2 rounded-xl font-semibold text-xs flex items-center justify-center">
+                    <i class="fa-solid ${waOn ? 'fa-pen' : 'fa-plus'} mr-1"></i> ${waOn ? 'Edit API' : 'Atur API'}
+                </button>
+                ${waOn ? `<button onclick="testWaApi('${s.id}')" class="px-3 py-2 rounded-xl font-semibold text-xs flex items-center bg-blue-50 text-blue-700 hover:bg-blue-100 transition">
+                    <i class="fa-solid fa-paper-plane mr-1"></i> Test
+                </button>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function openEditWaApiModal(schoolId) {
+    // Reuse the edit school modal but scroll to WA section
+    openEditSchoolModal(schoolId);
+    // Scroll to WA section in modal
+    setTimeout(() => {
+        const waSection = document.querySelector('#modalEditSchool .border-t.border-slate-200');
+        if (waSection) waSection.scrollIntoView({ behavior: 'smooth' });
+    }, 200);
+}
+
+async function testWaApi(schoolId) {
+    const school = allSchools.find(s => s.id === schoolId);
+    if (!school) return;
+
+    if (!school.waApiKey) return showToast('API Key belum diatur!', 'warning');
+
+    showToast('Mengirim test WhatsApp...', 'info');
+
+    const targetPhone = school.telp || school.waSender || '';
+    if (!targetPhone || targetPhone.length < 10) {
+        return showToast('Tidak ada nomor tujuan untuk test!', 'error');
+    }
+
+    const testMessage = `[Smart Absen] Test WhatsApp API - Sekolah: ${school.sekolah || school.nama}. Notifikasi WhatsApp berhasil terhubung!`;
+
+    try {
+        let success = false;
+
+        if (school.waProvider === 'fonnte') {
+            const res = await fetch('https://api.fonnte.com/send', {
+                method: 'POST',
+                headers: { 'Authorization': school.waApiKey },
+                body: JSON.stringify({ target: targetPhone, message: testMessage })
+            });
+            const result = await res.json();
+            success = result.status === true;
+        } else if (school.waProvider === 'wablas') {
+            const res = await fetch('https://ogo.wablas.com/api/send-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': school.waApiKey },
+                body: JSON.stringify({ phone: targetPhone, message: testMessage })
+            });
+            const result = await res.json();
+            success = result.status === true || result.code === 200;
+        } else if (school.waProvider === 'zenziva') {
+            const res = await fetch(`https://api.zenziva.net/v2/sendwa/${school.waApiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `phonecode=${targetPhone}&message=${encodeURIComponent(testMessage)}`
+            });
+            const result = await res.json();
+            success = result.status === 'Success' || result.messageId;
+        } else if (school.waProvider === 'custom' && school.waWebhook) {
+            const res = await fetch(school.waWebhook, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${school.waApiKey}` },
+                body: JSON.stringify({ target: targetPhone, message: testMessage, sender: school.waSender || '' })
+            });
+            success = res.ok;
+        } else {
+            showToast('Provider tidak dikenali atau Webhook kosong!', 'warning');
+            return;
+        }
+
+        if (success) {
+            showToast('Test WhatsApp berhasil terkirim ke ' + targetPhone + '!', 'success');
+            addActivityLog('broadcast', `Test WA berhasil: ${school.sekolah} (${school.waProvider})`);
+        } else {
+            showToast('Test WhatsApp gagal. Cek API Key dan nomor tujuan.', 'error');
+        }
+    } catch (e) {
+        console.error('Test WA API error:', e);
+        showToast('Error test WA: ' + e.message, 'error');
     }
 }
 
