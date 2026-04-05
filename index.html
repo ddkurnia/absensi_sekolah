@@ -190,7 +190,40 @@
                         <i class="fa-solid fa-right-to-bracket mr-2"></i> Masuk Sistem
                     </button>
                 </div>
-                <p class="text-center text-xs text-slate-400 mt-6">Default Password: <span class="text-primary-300 font-bold">123456</span></p>
+
+                <!-- Link Registrasi -->
+                <div class="mt-4 text-center">
+                    <button id="btnShowRegister" onclick="toggleRegisterForm()" class="text-primary-300 text-sm font-semibold hover:underline">
+                        <i class="fa-solid fa-user-plus mr-1"></i> Daftar Akun Admin Sekolah Baru
+                    </button>
+                </div>
+
+                <!-- Form Registrasi -->
+                <div id="registerForm" class="hidden mt-5">
+                    <div class="border-t border-white/20 pt-5 mt-2">
+                        <p class="text-xs text-slate-400 uppercase tracking-wider font-bold mb-3 text-center">Registrasi Admin Sekolah Baru</p>
+                        <div class="space-y-3">
+                            <input type="text" id="regNama" placeholder="Nama Lengkap Admin" class="w-full p-3 rounded-xl bg-white/5 border border-white/15 text-white placeholder-slate-500 text-sm focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition">
+                            <div class="grid grid-cols-2 gap-3">
+                                <input type="text" id="regNip" placeholder="NIP" class="w-full p-3 rounded-xl bg-white/5 border border-white/15 text-white placeholder-slate-500 text-sm focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition">
+                                <input type="text" id="regSekolah" placeholder="Nama Sekolah" class="w-full p-3 rounded-xl bg-white/5 border border-white/15 text-white placeholder-slate-500 text-sm focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition">
+                            </div>
+                            <input type="text" id="regTelp" placeholder="No. Telepon (opsional)" class="w-full p-3 rounded-xl bg-white/5 border border-white/15 text-white placeholder-slate-500 text-sm focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition">
+                            <div class="grid grid-cols-2 gap-3">
+                                <input type="password" id="regPassword" placeholder="Buat Kata Sandi" class="w-full p-3 rounded-xl bg-white/5 border border-white/15 text-white placeholder-slate-500 text-sm focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition">
+                                <input type="password" id="regPassword2" placeholder="Ulangi Kata Sandi" class="w-full p-3 rounded-xl bg-white/5 border border-white/15 text-white placeholder-slate-500 text-sm focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition">
+                            </div>
+                            <button onclick="doRegister()" class="w-full p-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-bold transition shadow text-sm">
+                                <i class="fa-solid fa-check-circle mr-2"></i> Daftar Sekarang
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Info Akun Demo -->
+                <div id="registerHint" class="mt-4 text-center space-y-1">
+                    <p class="text-xs text-slate-500">Akun demo tersedia: <span class="text-primary-300 font-bold">NIP 0001</span> password <span class="text-primary-300 font-bold">123456</span></p>
+                </div>
             </div>
         </div>
 
@@ -442,24 +475,6 @@
                 </button>
             </div>
 
-                        <div class="flex flex-wrap gap-2 mb-6">
-                <button onclick="switchSettingsTab('jam')" class="tab-btn active px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="jam">
-                    <i class="fa-solid fa-clock mr-1.5"></i> Jam Absensi
-                </button>
-                <button onclick="switchSettingsTab('wa')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="wa">
-                    <i class="fa-brands fa-whatsapp mr-1.5"></i> Template WA
-                </button>
-                <button onclick="switchSettingsTab('sekolah')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="sekolah">
-                    <i class="fa-solid fa-school mr-1.5"></i> Profil Sekolah
-                </button>
-                <button onclick="switchSettingsTab('jadwal')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="jadwal">
-                    <i class="fa-solid fa-calendar-days mr-1.5"></i> Jadwal Pelajaran
-                </button>
-                <button onclick="switchSettingsTab('database')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="database">
-                    <i class="fa-solid fa-database mr-1.5"></i> Integrasi Database
-                </button>
-            </div>
-
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="kelasCards"></div>
             <div id="emptyKelas" class="hidden p-12 text-center">
                 <i class="fa-solid fa-chalkboard text-4xl text-slate-300 mb-3"></i>
@@ -554,27 +569,6 @@
                 </div>
             </div>
 
-                        <div id="tab-database" class="settings-tab hidden">
-                <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl shadow-lg border border-slate-700 mb-4 text-white">
-                    <h3 class="text-lg font-bold mb-4 flex items-center text-primary-400"><i class="fa-solid fa-server mr-2"></i> Integrasi Database Klien</h3>
-                    <p class="text-sm text-slate-300 mb-6">Masukkan URL Web App dari Google Apps Script milik sekolah di sini. Fitur ini memungkinkan 1 aplikasi dipakai banyak sekolah tanpa mengubah kode sumber.</p>
-                    
-                    <div class="space-y-5">
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-300 mb-1.5">URL Web App (Google Apps Script) <span class="text-red-400">*</span></label>
-                            <input type="url" id="inputGasUrl" class="w-full p-3 rounded-xl bg-slate-900/50 border border-slate-600 text-white placeholder-slate-500 focus:ring-2 focus:ring-primary-400" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-300 mb-1.5">URL Sheet "Cetak Kartu" (Otomatisasi Barcode Google Sheets)</label>
-                            <input type="url" id="inputSheetCetakUrl" class="w-full p-3 rounded-xl bg-slate-900/50 border border-slate-600 text-white placeholder-slate-500 focus:ring-2 focus:ring-primary-400" placeholder="https://docs.google.com/spreadsheets/d/12345.../edit#gid=98765">
-                        </div>
-                    </div>
-                </div>
-                <button onclick="saveDatabaseConfig()" class="btn-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg text-sm">
-                    <i class="fa-solid fa-link mr-2"></i> Hubungkan Database
-                </button>
-            </div>
-            
             <!-- Summary Stats -->
             <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4" id="rekapSummary"></div>
             
@@ -624,6 +618,9 @@
                 </button>
                 <button onclick="switchSettingsTab('jadwal')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="jadwal">
                     <i class="fa-solid fa-calendar-days mr-1.5"></i> Jadwal Pelajaran
+                </button>
+                <button onclick="switchSettingsTab('database')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="database">
+                    <i class="fa-solid fa-database mr-1.5"></i> Integrasi Database
                 </button>
             </div>
             
@@ -775,6 +772,27 @@
                 </div>
                 <button onclick="saveJadwal()" class="btn-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg text-sm">
                     <i class="fa-solid fa-save mr-2"></i> Simpan Jadwal
+                </button>
+            </div>
+
+            <!-- Tab: Integrasi Database -->
+            <div id="tab-database" class="settings-tab hidden">
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl shadow-lg border border-slate-700 mb-4 text-white">
+                    <h3 class="text-lg font-bold mb-4 flex items-center text-primary-400"><i class="fa-solid fa-server mr-2"></i> Integrasi Database Klien</h3>
+                    <p class="text-sm text-slate-300 mb-6">Masukkan URL Web App dari Google Apps Script milik sekolah di sini. Fitur ini memungkinkan 1 aplikasi dipakai banyak sekolah tanpa mengubah kode sumber.</p>
+                    <div class="space-y-5">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-300 mb-1.5">URL Web App (Google Apps Script) <span class="text-red-400">*</span></label>
+                            <input type="url" id="inputGasUrl" class="w-full p-3 rounded-xl bg-slate-900/50 border border-slate-600 text-white placeholder-slate-500 focus:ring-2 focus:ring-primary-400" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-300 mb-1.5">URL Sheet "Cetak Kartu" (Otomatisasi Barcode Google Sheets)</label>
+                            <input type="url" id="inputSheetCetakUrl" class="w-full p-3 rounded-xl bg-slate-900/50 border border-slate-600 text-white placeholder-slate-500 focus:ring-2 focus:ring-primary-400" placeholder="https://docs.google.com/spreadsheets/d/12345.../edit#gid=98765">
+                        </div>
+                    </div>
+                </div>
+                <button onclick="saveDatabaseConfig()" class="btn-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg text-sm">
+                    <i class="fa-solid fa-link mr-2"></i> Hubungkan Database
                 </button>
             </div>
         </div>
