@@ -1,8 +1,10 @@
-const CACHE_NAME = 'smart-absen-v2';
+const CACHE_NAME = 'smart-absen-v4';
 const urlsToCache = [
   './index.html',
   './app.js',
   './manifest.json',
+  './master-admin.html',
+  './master-admin.js',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js',
@@ -43,6 +45,10 @@ self.addEventListener('fetch', event => {
     }).catch(() => {
       // Offline fallback
       if(event.request.mode === 'navigate') {
+        const url = new URL(event.request.url);
+        if (url.pathname.includes('master-admin')) {
+          return caches.match('./master-admin.html');
+        }
         return caches.match('./index.html');
       }
     })
