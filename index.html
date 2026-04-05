@@ -441,7 +441,25 @@
                     <i class="fa-solid fa-plus mr-2"></i> Tambah Kelas
                 </button>
             </div>
-            
+
+                        <div class="flex flex-wrap gap-2 mb-6">
+                <button onclick="switchSettingsTab('jam')" class="tab-btn active px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="jam">
+                    <i class="fa-solid fa-clock mr-1.5"></i> Jam Absensi
+                </button>
+                <button onclick="switchSettingsTab('wa')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="wa">
+                    <i class="fa-brands fa-whatsapp mr-1.5"></i> Template WA
+                </button>
+                <button onclick="switchSettingsTab('sekolah')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="sekolah">
+                    <i class="fa-solid fa-school mr-1.5"></i> Profil Sekolah
+                </button>
+                <button onclick="switchSettingsTab('jadwal')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="jadwal">
+                    <i class="fa-solid fa-calendar-days mr-1.5"></i> Jadwal Pelajaran
+                </button>
+                <button onclick="switchSettingsTab('database')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="database">
+                    <i class="fa-solid fa-database mr-1.5"></i> Integrasi Database
+                </button>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="kelasCards"></div>
             <div id="emptyKelas" class="hidden p-12 text-center">
                 <i class="fa-solid fa-chalkboard text-4xl text-slate-300 mb-3"></i>
