@@ -369,13 +369,6 @@ window.switchSettingsTab = function(tab) {
 };
 
 // ===== KONFIGURASI DATABASE (SaaS) =====
-function loadAllSettings() {
-    loadSettings();
-    loadProfileSettings();
-    renderJadwalList();
-    loadDatabaseConfig();
-}
-
 function getGasUrl() {
     const dbConfig = JSON.parse(localStorage.getItem('dbConfig')) || {};
     return dbConfig.gasUrl || ''; 
@@ -652,18 +645,18 @@ async function syncData() {
     banner.classList.remove('hidden');
     banner.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Menyinkronkan ${offlineQueue.length} data...`;
     try {
-        if(GAS_URL !== 'URL_APPS_SCRIPT_ANDA_DISINI') {
-                try {
         const currentGasUrl = getGasUrl();
         if(currentGasUrl) {
             const res = await fetch(currentGasUrl, { method:'POST', body:JSON.stringify({action:'sync_batch',data:offlineQueue}) });
-
             const result = await res.json();
             if(result.status === 'success') {
                 offlineQueue = []; setData('offlineQueue', []);
                 banner.innerHTML = `<i class="fa-solid fa-check mr-2"></i> Sinkronisasi berhasil!`;
                 setTimeout(() => banner.classList.add('hidden'), 3000);
             }
+        } else {
+            banner.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-2"></i> Gagal: Database belum dihubungkan.`;
+            document.getElementById('btnSync').classList.remove('hidden');
         }
     } catch(e) {
         banner.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-2"></i> Gagal sinkronisasi.`;
