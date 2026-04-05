@@ -407,6 +407,39 @@ window.switchSettingsTab = function(tab) {
     document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
 };
 
+// ===== KONFIGURASI DATABASE (SaaS) =====
+function loadAllSettings() {
+    loadSettings();
+    loadProfileSettings();
+    renderJadwalList();
+    loadDatabaseConfig();
+}
+
+function getGasUrl() {
+    const dbConfig = JSON.parse(localStorage.getItem('dbConfig')) || {};
+    return dbConfig.gasUrl || ''; 
+}
+
+function getSheetCetakUrl() {
+    const dbConfig = JSON.parse(localStorage.getItem('dbConfig')) || {};
+    return dbConfig.sheetCetakUrl || '';
+}
+
+function loadDatabaseConfig() {
+    const dbConfig = JSON.parse(localStorage.getItem('dbConfig')) || {};
+    if(document.getElementById('inputGasUrl')) document.getElementById('inputGasUrl').value = dbConfig.gasUrl || '';
+    if(document.getElementById('inputSheetCetakUrl')) document.getElementById('inputSheetCetakUrl').value = dbConfig.sheetCetakUrl || '';
+}
+
+window.saveDatabaseConfig = function() {
+    const gasUrl = document.getElementById('inputGasUrl').value.trim();
+    const sheetCetakUrl = document.getElementById('inputSheetCetakUrl').value.trim();
+    if(!gasUrl) return showToast('URL Google Apps Script wajib diisi!', 'error');
+    
+    localStorage.setItem('dbConfig', JSON.stringify({ gasUrl, sheetCetakUrl }));
+    showToast('Database berhasil dihubungkan!', 'success');
+};
+
 // ===== 11. JADWAL PELAJARAN =====
 function renderJadwalList() {
     const jadwal = getJadwal();
