@@ -188,40 +188,7 @@ function showPage(id) {
     allPages.forEach(p => { const el = document.getElementById(p); if(el) el.classList.add('hidden'); });
     const target = document.getElementById(id);
     if(target) { target.classList.remove('hidden'); target.classList.add('fade-in'); }
-
-function loadAllSettings() {
-    loadSettings();
-    loadProfileSettings();
-    renderJadwalList();
-    loadDatabaseConfig(); // Tambahkan pemanggilan ini
-}
-
-// Tambahkan blok fungsi Database ini tepat di bawah loadAllSettings()
-function getGasUrl() {
-    const dbConfig = JSON.parse(localStorage.getItem('dbConfig')) || {};
-    return dbConfig.gasUrl || ''; 
-}
-
-function getSheetCetakUrl() {
-    const dbConfig = JSON.parse(localStorage.getItem('dbConfig')) || {};
-    return dbConfig.sheetCetakUrl || '';
-}
-
-function loadDatabaseConfig() {
-    const dbConfig = JSON.parse(localStorage.getItem('dbConfig')) || {};
-    if(document.getElementById('inputGasUrl')) document.getElementById('inputGasUrl').value = dbConfig.gasUrl || '';
-    if(document.getElementById('inputSheetCetakUrl')) document.getElementById('inputSheetCetakUrl').value = dbConfig.sheetCetakUrl || '';
-}
-
-window.saveDatabaseConfig = function() {
-    const gasUrl = document.getElementById('inputGasUrl').value.trim();
-    const sheetCetakUrl = document.getElementById('inputSheetCetakUrl').value.trim();
-    if(!gasUrl) return showToast('URL Google Apps Script wajib diisi!', 'error');
     
-    localStorage.setItem('dbConfig', JSON.stringify({ gasUrl, sheetCetakUrl }));
-    showToast('Database berhasil dihubungkan!', 'success');
-};
-
     // Update sidebar active
     document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
     const activeLink = document.querySelector(`.sidebar-link[data-page="${id}"]`);
@@ -341,12 +308,6 @@ function loadSettings() {
     const checks = ['settingAutoPulang','settingWeekend','settingWaEnable'];
     checks.forEach(id => { const el = document.getElementById(id); if(el) el.checked = !!s[id.replace('setting','').toLowerCase()]; });
     const waAdmin = document.getElementById('settingWaAdmin'); if(waAdmin) waAdmin.value = s.waAdmin || '';
-}
-
-function loadAllSettings() {
-    loadSettings();
-    loadProfileSettings();
-    renderJadwalList();
 }
 
 function loadProfileSettings() {
@@ -624,9 +585,14 @@ function processScan(nis) {
         
         displayScanRes(siswa.nama, siswa.kelasNama, statusSaatIni === 'TUTUP_MASUK' ? 'TERLAMBAT' : statusSaatIni);
         
-        // Kirim ke GAS jika online
-        if(navigator.onLine && GAS_URL !== 'URL_APPS_SCRIPT_ANDA_DISINI') {
-            fetch(GAS_URL, { method:'POST', body:JSON.stringify({action:'absen',nis:siswa.nis,waktu:timeStr,statusMode:newAbsen.status}) }).catch(()=>{});
+                // Kirim ke GAS jika online (SaaS Dinamis)
+        if(navigator.onLine) {
+            const currentGasUrl = getGasUrl();
+            if(currentGasUrl) {
+                fetch(currentGasUrl, { method:'POST', body:JSON.stringify({action:'absen',nis:siswa.nis,waktu:timeStr,statusMode:newAbsen.status}) }).catch(()=>{});
+            } else {
+                showToast('Peringatan: Database klien belum dihubungkan di Pengaturan!', 'warning');
+            }
         }
     }
     
@@ -687,7 +653,11 @@ async function syncData() {
     banner.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Menyinkronkan ${offlineQueue.length} data...`;
     try {
         if(GAS_URL !== 'URL_APPS_SCRIPT_ANDA_DISINI') {
-            const res = await fetch(GAS_URL, { method:'POST', body:JSON.stringify({action:'sync_batch',data:offlineQueue}) });
+                try {
+        const currentGasUrl = getGasUrl();
+        if(currentGasUrl) {
+            const res = await fetch(currentGasUrl, { method:'POST', body:JSON.stringify({action:'sync_batch',data:offlineQueue}) });
+
             const result = await res.json();
             if(result.status === 'success') {
                 offlineQueue = []; setData('offlineQueue', []);
@@ -1271,76 +1241,25 @@ window.exportRekap = function() {
     showToast('File rekap berhasil diekspor!');
 };
 
-// ===== 21. BARCODE (FIX: Render Canvas In-Memory) =====
-
-// Helper: render barcode ke canvas di dalam memori, tanpa harus masuk ke DOM
-function renderBarcodeToImage(nis, options) {
-    try {
-        const canvas = document.createElement('canvas');
-        // Pastikan nis dikonversi menjadi String dengan String(nis)
-        JsBarcode(canvas, String(nis), { format: "CODE128", ...options });
-        return canvas.toDataURL('image/png');
-    } catch(e) {
-        console.error('Barcode render error:', e);
-        return null;
-    }
-}
+// ===== 21. BARCODE (SaaS Model - Buka Otomatis ke Google Sheets) =====
 
 window.showSingleBarcode = function(nis, nama, kelas) {
-    document.getElementById('modalStudentName').innerText = nama;
-    document.getElementById('modalStudentClass').innerText = 'Kelas ' + kelas;
-    
-    // 1. Tampilkan di Modal (SVG)
-    JsBarcode("#singleBarcode", String(nis), { format:"CODE128", width:3, height:80, displayValue:true, fontSize:14 });
-    document.getElementById('barcodeModal').classList.remove('hidden');
-    
-    // 2. Siapkan untuk Print (Image Base64)
-    const barcodeImg = renderBarcodeToImage(String(nis), { width:2, height:60, displayValue:true, fontSize:14 });
-    
-    document.getElementById('massBarcodeContainer').innerHTML = `
-        <div class="text-center p-6 border-2 border-slate-800 rounded-xl w-80 mx-auto mb-4 print-card">
-            <p class="text-xs text-slate-500 mb-1" style="font-size:10px;">KARTU ABSENSI SISWA</p>
-            <h3 class="font-bold text-lg">${nama}</h3>
-            <p class="text-sm mb-1">Kelas: ${kelas}</p>
-            <p class="text-xs text-slate-500 mb-4" style="font-size:11px;">NIS: ${nis}</p>
-            ${barcodeImg ? `<img src="${barcodeImg}" style="width:250px;height:auto;margin:0 auto;" />` : `<svg id="printSingle"></svg>`}
-        </div>`;
-    
-    if(!barcodeImg) {
-        try { JsBarcode("#printSingle", String(nis), { width:2, height:60, displayValue:true }); } catch(e) {}
+    const sheetUrl = getSheetCetakUrl();
+    if(!sheetUrl) {
+        return showToast('URL Sheet Cetak belum disetting di menu Integrasi Database!', 'warning');
     }
+    showToast('Membuka database pusat untuk cetak...', 'info');
+    window.open(sheetUrl, '_blank');
 };
 
 window.printBarcodePerClass = function() {
     const selectedClass = document.getElementById('filterKelas').value;
     if(!selectedClass) return showToast('Pilih kelas terlebih dahulu!', 'warning');
-    const siswaList = getSiswa().filter(s => s.kelasId === selectedClass && s.aktif);
-    if(siswaList.length === 0) return showToast('Tidak ada siswa aktif di kelas ini!', 'warning');
     
-    let html = '';
-    siswaList.forEach((s, i) => {
-        // Render setiap kartu
-        const barcodeImg = renderBarcodeToImage(String(s.nis), { width:2, height:50, displayValue:true, fontSize:12 });
-        // Tambahkan "break-inside-avoid" agar kartu tidak terpotong ke halaman berikutnya
-        html += `<div class="text-center p-4 border-2 border-slate-800 rounded-xl mb-4 print-card break-inside-avoid" style="page-break-inside: avoid;">
-            <p class="text-xs text-slate-500 mb-1" style="font-size:10px;">KARTU ABSENSI SISWA</p>
-            <h3 class="font-bold text-base">${s.nama}</h3>
-            <p class="text-xs font-semibold" style="font-size:12px;">Kelas: ${s.kelasNama}</p>
-            <p class="text-xs text-slate-500 mb-3" style="font-size:10px;">NIS: ${s.nis}</p>
-            ${barcodeImg ? `<img src="${barcodeImg}" style="width:220px;height:auto;margin:0 auto;" />` : `<svg id="mb-${i}"></svg>`}
-        </div>`;
-    });
-    
-    document.getElementById('massBarcodeContainer').innerHTML = html;
-    
-    // Fallback jika SVG
-    siswaList.forEach((s, i) => {
-        const svgEl = document.getElementById('mb-' + i);
-        if(svgEl && svgEl.innerHTML === '') {
-            try { JsBarcode(svgEl, String(s.nis), { width:2, height:50, displayValue:true }); } catch(e) {}
-        }
-    });
-    
-    // Memberikan jeda lebih lama agar browser memuat gambar dengan sempurna sebelum nge-print
-    setTimeout(() => window.print(), 500);
+    const sheetUrl = getSheetCetakUrl();
+    if(!sheetUrl) {
+        return showToast('URL Sheet Cetak belum disetting di menu Integrasi Database!', 'warning');
+    }
+    showToast('Membuka Google Sheets... Silakan tekan Ctrl+P di sana.', 'info');
+    window.open(sheetUrl, '_blank');
 };
