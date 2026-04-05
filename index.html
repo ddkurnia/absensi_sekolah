@@ -24,6 +24,11 @@
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
+    <!-- Firebase SDK v10 (compat mode for script tags) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         * { font-family: 'Inter', sans-serif; }
@@ -218,6 +223,12 @@
                             </button>
                         </div>
                     </div>
+                </div>
+
+                <!-- Firebase Status Indicator -->
+                <div id="firebaseLoginStatus" class="mt-3 flex items-center justify-center gap-2 text-xs">
+                    <div id="fbStatusDot" class="w-2 h-2 rounded-full bg-slate-500"></div>
+                    <span id="fbStatusText" class="text-slate-400">Memeriksa Firebase...</span>
                 </div>
 
                 <!-- Info Akun Demo -->
@@ -527,7 +538,10 @@
                 </div>
                 <div class="flex gap-2 flex-wrap">
                     <button onclick="exportRekap()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-semibold shadow-sm text-sm flex items-center transition">
-                        <i class="fa-solid fa-file-csv mr-2"></i> Ekspor CSV
+                        <i class="fa-solid fa-file-csv mr-2"></i> Ekspor Excel
+                    </button>
+                    <button onclick="exportToGoogleSheet()" class="bg-white border border-green-200 hover:bg-green-50 text-green-700 px-4 py-2.5 rounded-xl font-semibold shadow-sm text-sm flex items-center transition">
+                        <i class="fa-solid fa-table mr-2"></i> Export ke Google Sheet
                     </button>
                     <button onclick="window.print()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-semibold shadow-sm text-sm flex items-center transition no-print">
                         <i class="fa-solid fa-print mr-2"></i> Cetak
@@ -601,6 +615,130 @@
         </div>
 
         <!-- ====== PENGATURAN ADMIN PAGE ====== -->
+        <!-- ====== PANDUAN URL GAS & SHEET PAGE ====== -->
+        <div id="panduan-url-page" class="hidden p-6 lg:p-8 pt-6 h-full fade-in overflow-y-auto custom-scroll">
+            <h1 class="text-2xl lg:text-3xl font-black text-slate-800 mb-2"><i class="fa-solid fa-link text-primary-500 mr-2"></i>Panduan Koneksi Database</h1>
+            <p class="text-slate-500 text-sm mb-6">Hubungkan aplikasi dengan Google Apps Script & Google Sheet milik sekolah</p>
+
+            <!-- Status Koneksi -->
+            <div id="panduanConnStatus" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-6">
+                <div class="flex items-center gap-4">
+                    <div id="panduanStatusIcon" class="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center">
+                        <i class="fa-solid fa-plug-circle-xmark text-2xl text-slate-400"></i>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-slate-800" id="panduanStatusTitle">Belum Terhubung</h3>
+                        <p class="text-sm text-slate-500" id="panduanStatusDesc">Google Apps Script belum dikonfigurasi. Data menggunakan mode lokal.</p>
+                    </div>
+                    <div id="panduanStatusBadge" class="px-4 py-2 rounded-full text-xs font-bold bg-slate-100 text-slate-500">OFFLINE</div>
+                </div>
+            </div>
+
+            <!-- Step 1: GAS URL -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-4">
+                <div class="flex items-start gap-4 mb-5">
+                    <div class="w-10 h-10 bg-gradient-to-br from-primary-500 to-teal-600 rounded-xl flex items-center justify-center text-white font-black text-lg shrink-0">1</div>
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-lg">URL Google Apps Script (GAS)</h3>
+                        <p class="text-sm text-slate-500 mt-1">Google Apps Script berfungsi sebagai backend/server untuk menyimpan dan mengambil data absensi sekolah ke Google Sheet.</p>
+                    </div>
+                </div>
+
+                <!-- Panduan Cara Mendapatkan -->
+                <div class="bg-primary-50 border border-primary-200 rounded-xl p-4 mb-4">
+                    <h4 class="font-bold text-primary-800 text-sm mb-2"><i class="fa-solid fa-lightbulb text-amber-500 mr-1.5"></i> Cara Mendapatkan URL GAS:</h4>
+                    <ol class="text-sm text-primary-700 space-y-2 list-decimal list-inside">
+                        <li>Buka <strong>Google Sheets</strong> baru atau yang sudah ada</li>
+                        <li>Klik menu <strong>Extensions → Apps Script</strong></li>
+                        <li>Copy-paste kode <strong>code.gs</strong> yang disediakan developer ke editor</li>
+                        <li>Klik <strong>Deploy → New deployment</strong></li>
+                        <li>Pilih type <strong>Web app</strong>, set "Execute as" ke <strong>Me</strong>, "Who has access" ke <strong>Anyone</strong></li>
+                        <li>Klik <strong>Deploy</strong>, lalu <strong>Copy</strong> URL Web app yang muncul</li>
+                        <li>Paste URL tersebut di kolom di bawah ini</li>
+                    </ol>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-slate-600 mb-1.5">URL Web App (Google Apps Script) <span class="text-red-500">*</span></label>
+                    <div class="flex gap-2">
+                        <input type="url" id="panduanGasUrl" class="flex-1 p-3 border border-slate-200 rounded-xl input-modern text-sm" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
+                        <button onclick="testGasConnection()" id="btnTestGas" class="px-4 py-3 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-sm font-semibold text-slate-600 transition">
+                            <i class="fa-solid fa-stethoscope mr-1"></i> Test
+                        </button>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1.5"><i class="fa-solid fa-info-circle mr-1"></i>URL biasanya berformat: https://script.google.com/macros/s/[ID]/exec</p>
+                    <div id="gasTestResult" class="hidden mt-2 p-3 rounded-xl text-sm"></div>
+                </div>
+            </div>
+
+            <!-- Step 2: Sheet URL -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-4">
+                <div class="flex items-start gap-4 mb-5">
+                    <div class="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center text-white font-black text-lg shrink-0">2</div>
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-lg">URL Google Sheet (Opsional)</h3>
+                        <p class="text-sm text-slate-500 mt-1">URL Google Sheet utama untuk melihat data langsung di spreadsheet. Juga digunakan untuk cetak kartu barcode.</p>
+                    </div>
+                </div>
+
+                <!-- Panduan Cara Mendapatkan -->
+                <div class="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+                    <h4 class="font-bold text-green-800 text-sm mb-2"><i class="fa-solid fa-lightbulb text-amber-500 mr-1.5"></i> Cara Mendapatkan URL Sheet:</h4>
+                    <ol class="text-sm text-green-700 space-y-2 list-decimal list-inside">
+                        <li>Buka <strong>Google Sheets</strong> yang sama dengan Apps Script di atas</li>
+                        <li>Di bar alamat browser, <strong>copy URL</strong> spreadsheet tersebut</li>
+                        <li>Paste URL tersebut di kolom di bawah ini</li>
+                        <li>URL biasanya berformat: <code class="bg-green-100 px-1.5 py-0.5 rounded text-xs">https://docs.google.com/spreadsheets/d/[ID]/edit</code></li>
+                    </ol>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-slate-600 mb-1.5">URL Google Sheet</label>
+                    <input type="url" id="panduanSheetUrl" class="w-full p-3 border border-slate-200 rounded-xl input-modern text-sm" placeholder="https://docs.google.com/spreadsheets/d/.../edit">
+                    <p class="text-xs text-slate-400 mt-1.5"><i class="fa-solid fa-info-circle mr-1"></i>URL Google Sheet untuk melihat data secara langsung dan cetak kartu barcode</p>
+                </div>
+            </div>
+
+            <!-- Info Tambahan -->
+            <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 mb-6">
+                <h3 class="font-bold text-blue-800 mb-3 flex items-center"><i class="fa-solid fa-circle-info text-blue-500 mr-2"></i> Informasi Penting</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-700">
+                    <div class="flex items-start gap-3">
+                        <i class="fa-solid fa-check-circle text-green-500 mt-0.5"></i>
+                        <p><strong>Setiap sekolah</strong> menggunakan Google Sheet masing-masing. Data tidak tercampur antar sekolah.</p>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <i class="fa-solid fa-check-circle text-green-500 mt-0.5"></i>
+                        <p><strong>Google Sheet gratis</strong> — tidak ada biaya server. Semua data tersimpan aman di cloud Google.</p>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <i class="fa-solid fa-check-circle text-green-500 mt-0.5"></i>
+                        <p><strong>Apps Script</strong> berfungsi sebagai jembatan antara aplikasi dan Google Sheet.</p>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <i class="fa-solid fa-check-circle text-green-500 mt-0.5"></i>
+                        <p>Hubungi <strong>developer</strong> jika membutuhkan bantuan setup Google Apps Script.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tombol Simpan -->
+            <div class="flex flex-wrap gap-3">
+                <button onclick="savePanduanUrl()" class="btn-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg text-sm">
+                    <i class="fa-solid fa-save mr-2"></i> Simpan & Hubungkan
+                </button>
+                <button onclick="resetPanduanUrl()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-6 py-3 rounded-xl font-semibold shadow-sm text-sm transition">
+                    <i class="fa-solid fa-rotate-left mr-2"></i> Reset Koneksi
+                </button>
+                <a id="panduanSheetLink" href="#" target="_blank" class="hidden bg-white border border-green-200 hover:bg-green-50 text-green-700 px-6 py-3 rounded-xl font-semibold shadow-sm text-sm transition flex items-center">
+                    <i class="fa-solid fa-external-link-alt mr-2"></i> Buka Google Sheet
+                </a>
+                <a id="panduanGasLink" href="#" target="_blank" class="hidden bg-white border border-primary-200 hover:bg-primary-50 text-primary-700 px-6 py-3 rounded-xl font-semibold shadow-sm text-sm transition flex items-center">
+                    <i class="fa-solid fa-external-link-alt mr-2"></i> Buka Apps Script
+                </a>
+            </div>
+        </div>
+
         <div id="settings-page" class="hidden p-6 lg:p-8 pt-6 h-full fade-in overflow-y-auto custom-scroll">
             <h1 class="text-2xl lg:text-3xl font-black text-slate-800 mb-2">Pengaturan Sistem</h1>
             <p class="text-slate-500 text-sm mb-6">Konfigurasi lengkap sistem absensi sekolah</p>
@@ -621,6 +759,9 @@
                 </button>
                 <button onclick="switchSettingsTab('database')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="database">
                     <i class="fa-solid fa-database mr-1.5"></i> Integrasi Database
+                </button>
+                <button onclick="switchSettingsTab('firebase')" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white text-slate-600" data-tab="firebase">
+                    <i class="fa-solid fa-fire mr-1.5" style="color:#FFA000"></i> Firebase Cloud
                 </button>
             </div>
             
@@ -773,6 +914,62 @@
                 <button onclick="saveJadwal()" class="btn-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg text-sm">
                     <i class="fa-solid fa-save mr-2"></i> Simpan Jadwal
                 </button>
+            </div>
+
+            <!-- Tab: Konfigurasi Firebase -->
+            <div id="tab-firebase" class="settings-tab hidden">
+                <div class="bg-gradient-to-br from-amber-600 to-orange-700 p-6 rounded-2xl shadow-lg mb-4 text-white">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-bold flex items-center"><i class="fa-solid fa-fire mr-2 text-yellow-300"></i> Konfigurasi Firebase Cloud</h3>
+                        <div class="flex items-center gap-2 text-sm">
+                            <div id="fbSettingsDot" class="w-3 h-3 rounded-full bg-white/30"></div>
+                            <span id="fbSettingsStatus" class="text-white/70">Tidak terhubung</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-amber-100 mb-6">Hubungkan aplikasi dengan Firebase untuk sinkronisasi data antar perangkat secara real-time. Satu project Firebase dapat digunakan oleh banyak sekolah (multi-tenant).</p>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-amber-100 mb-1.5">API Key <span class="text-red-300">*</span></label>
+                            <input type="text" id="fbApiKey" class="w-full p-3 rounded-xl bg-amber-900/50 border border-amber-500/30 text-white placeholder-amber-200/50 focus:ring-2 focus:ring-yellow-300 text-sm" placeholder="AIzaSy...">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-amber-100 mb-1.5">Auth Domain <span class="text-red-300">*</span></label>
+                            <input type="text" id="fbAuthDomain" class="w-full p-3 rounded-xl bg-amber-900/50 border border-amber-500/30 text-white placeholder-amber-200/50 focus:ring-2 focus:ring-yellow-300 text-sm" placeholder="my-project.firebaseapp.com">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-amber-100 mb-1.5">Project ID <span class="text-red-300">*</span></label>
+                            <input type="text" id="fbProjectId" class="w-full p-3 rounded-xl bg-amber-900/50 border border-amber-500/30 text-white placeholder-amber-200/50 focus:ring-2 focus:ring-yellow-300 text-sm" placeholder="my-project-id">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-amber-100 mb-1.5">Storage Bucket</label>
+                            <input type="text" id="fbStorageBucket" class="w-full p-3 rounded-xl bg-amber-900/50 border border-amber-500/30 text-white placeholder-amber-200/50 focus:ring-2 focus:ring-yellow-300 text-sm" placeholder="my-project.appspot.com">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-amber-100 mb-1.5">Messaging Sender ID</label>
+                            <input type="text" id="fbSenderId" class="w-full p-3 rounded-xl bg-amber-900/50 border border-amber-500/30 text-white placeholder-amber-200/50 focus:ring-2 focus:ring-yellow-300 text-sm" placeholder="123456789">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-amber-100 mb-1.5">App ID <span class="text-red-300">*</span></label>
+                            <input type="text" id="fbAppId" class="w-full p-3 rounded-xl bg-amber-900/50 border border-amber-500/30 text-white placeholder-amber-200/50 focus:ring-2 focus:ring-yellow-300 text-sm" placeholder="1:123456789:web:abc123">
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-3 mb-4">
+                    <button onclick="connectFirebase()" class="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg text-sm transition">
+                        <i class="fa-solid fa-plug mr-2"></i> Hubungkan Firebase
+                    </button>
+                    <button onclick="disconnectFirebase()" class="btn-secondary text-white px-6 py-3 rounded-xl font-bold shadow-lg text-sm">
+                        <i class="fa-solid fa-plug-circle-xmark mr-2"></i> Putuskan Firebase
+                    </button>
+                    <button onclick="testFirebaseConnection()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-6 py-3 rounded-xl font-bold shadow-sm text-sm transition">
+                        <i class="fa-solid fa-stethoscope mr-2"></i> Test Koneksi Firebase
+                    </button>
+                </div>
+                <div id="firebaseTestResult" class="hidden bg-white p-4 rounded-2xl shadow-sm border border-slate-100 text-sm"></div>
+                <div id="firebaseSchoolInfo" class="hidden bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mt-4">
+                    <h4 class="font-bold text-slate-700 mb-3 flex items-center"><i class="fa-solid fa-school text-primary-500 mr-2"></i> Info Sekolah Terhubung</h4>
+                    <div class="space-y-2 text-sm" id="firebaseSchoolDetails"></div>
+                </div>
             </div>
 
             <!-- Tab: Integrasi Database -->
@@ -971,18 +1168,27 @@
                         <input type="text" id="inputNIPGuru" class="w-full p-3 rounded-xl border border-slate-200 input-modern" placeholder="NIP guru">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-slate-600 mb-1.5">Jabatan</label>
+                        <label class="block text-sm font-semibold text-slate-600 mb-1.5">Jabatan <span class="text-red-400">*</span></label>
                         <select id="inputRoleGuru" class="w-full p-3 rounded-xl border border-slate-200 input-modern">
-                            <option value="guru">Guru</option>
+                            <option value="admin">Administrator</option>
+                            <option value="kepsek">Kepala Sekolah</option>
                             <option value="piket">Guru Piket</option>
                             <option value="wali">Wali Kelas</option>
-                            <option value="admin">Administrator</option>
+                            <option value="guru">Guru</option>
                         </select>
                     </div>
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-slate-600 mb-1.5">Nama Lengkap <span class="text-red-400">*</span></label>
                     <input type="text" id="inputNamaGuru" class="w-full p-3 rounded-xl border border-slate-200 input-modern" placeholder="Nama lengkap guru">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-600 mb-1.5">Kata Sandi <span id="pwdRequiredHint" class="text-red-400">*</span></label>
+                    <div class="relative">
+                        <input type="password" id="inputPasswordGuru" class="w-full p-3 rounded-xl border border-slate-200 input-modern pr-10" placeholder="Minimal 4 karakter">
+                        <button type="button" onclick="togglePwdVisibility('inputPasswordGuru', this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-eye text-sm"></i></button>
+                    </div>
+                    <p id="pwdEditHint" class="text-xs text-slate-400 mt-1 hidden">Kosongkan jika tidak ingin mengubah kata sandi</p>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
@@ -1047,6 +1253,10 @@
         </div>
     </div>
 
+    <!-- Firebase SDK v10 Compat -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
