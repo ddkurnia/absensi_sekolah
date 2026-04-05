@@ -107,6 +107,7 @@
                 <li><a href="#" onclick="showPage('dashboard-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="dashboard-page"><i class="fa-solid fa-chart-line w-6 text-center mr-3 text-base"></i>Dashboard</a></li>
                 <li><a href="#" onclick="showPage('registrations-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="registrations-page"><i class="fa-solid fa-user-plus w-6 text-center mr-3 text-base"></i>Registrasi Admin<span id="pendingBadge" class="hidden ml-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full badge-pulse">0</span></a></li>
                 <li><a href="#" onclick="showPage('schools-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="schools-page"><i class="fa-solid fa-school w-6 text-center mr-3 text-base"></i>Kelola Sekolah</a></li>
+                <li><a href="#" onclick="showPage('wa-api-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="wa-api-page"><i class="fa-brands fa-whatsapp w-6 text-center mr-3 text-base"></i>WhatsApp API</a></li>
                 <li><a href="#" onclick="showPage('firebase-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="firebase-page"><i class="fa-solid fa-database w-6 text-center mr-3 text-base"></i>Firebase Config</a></li>
                 <li><a href="#" onclick="showPage('appconfig-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="appconfig-page"><i class="fa-solid fa-gear w-6 text-center mr-3 text-base"></i>Pengaturan App</a></li>
                 <li><a href="#" onclick="showPage('activity-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="activity-page"><i class="fa-solid fa-clock-rotate-left w-6 text-center mr-3 text-base"></i>Riwayat Aktivitas</a></li>
@@ -392,6 +393,72 @@
                     <i class="fa-solid fa-school text-4xl text-slate-300 mb-3"></i>
                     <p class="text-slate-400 font-semibold">Belum ada sekolah terdaftar</p>
                 </div>
+            </div>
+        </div>
+
+        <!-- ====== WHATSAPP API PAGE ====== -->
+        <div id="wa-api-page" class="hidden p-6 lg:p-8 pt-6 h-full fade-in">
+            <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
+                <div>
+                    <h1 class="text-2xl lg:text-3xl font-black text-slate-800"><i class="fa-brands fa-whatsapp text-green-600 mr-2"></i>WhatsApp API Management</h1>
+                    <p class="text-slate-500 text-sm mt-1">Atur API WhatsApp otomatis per sekolah untuk notifikasi absensi</p>
+                </div>
+                <div class="flex gap-2 flex-wrap">
+                    <button onclick="renderWaApiPage()" class="btn-primary text-white px-4 py-2.5 rounded-xl font-semibold shadow text-sm flex items-center">
+                        <i class="fa-solid fa-rotate mr-2"></i> Refresh
+                    </button>
+                </div>
+            </div>
+
+            <!-- Info Box -->
+            <div class="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6 flex items-start gap-4">
+                <div class="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <i class="fa-brands fa-whatsapp text-green-600 text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-green-800">Cara Kerja WhatsApp API</h3>
+                    <p class="text-sm text-green-700 mt-1">Setiap sekolah mendapatkan API WhatsApp sendiri. Saat siswa absen, sistem otomatis mengirim notifikasi ke orang tua. Anda (sebagai pemilik aplikasi) yang mengatur API key-nya dari sini. Mendukung: <strong>Fonnte, Wablas, Zenziva, Twilio</strong>, dan API WhatsApp lainnya.</p>
+                </div>
+            </div>
+
+            <!-- WA Stats -->
+            <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                <div class="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center"><i class="fa-brands fa-whatsapp text-green-600"></i></div>
+                    </div>
+                    <h3 class="text-2xl font-black text-slate-800" id="statWaConnected">0</h3>
+                    <p class="text-xs text-slate-500 font-semibold">Sekolah WA Aktif</p>
+                </div>
+                <div class="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center"><i class="fa-solid fa-plug text-slate-400"></i></div>
+                    </div>
+                    <h3 class="text-2xl font-black text-slate-800" id="statWaDisconnected">0</h3>
+                    <p class="text-xs text-slate-500 font-semibold">Belum Terhubung</p>
+                </div>
+                <div class="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center"><i class="fa-solid fa-paper-plane text-blue-600"></i></div>
+                    </div>
+                    <h3 class="text-2xl font-black text-slate-800" id="statWaTotal">0</h3>
+                    <p class="text-xs text-slate-500 font-semibold">Total Sekolah</p>
+                </div>
+            </div>
+
+            <!-- Search -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
+                <div class="relative">
+                    <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input type="text" id="searchWaApi" oninput="renderWaApiPage()" placeholder="Cari sekolah..." class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm input-modern">
+                </div>
+            </div>
+
+            <!-- WA API Cards -->
+            <div id="waApiCards" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+            <div id="emptyWaApi" class="hidden p-12 text-center">
+                <i class="fa-brands fa-whatsapp text-4xl text-slate-300 mb-3"></i>
+                <p class="text-slate-400 font-semibold">Belum ada sekolah terdaftar</p>
             </div>
         </div>
 
@@ -710,6 +777,50 @@
                     <label class="block text-xs font-semibold text-slate-500 mb-2">Sheet URL (Google Sheets)</label>
                     <input type="text" id="editSchoolSheetUrl" placeholder="https://docs.google.com/spreadsheets/d/.../edit" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
                     <p class="text-[10px] text-slate-400 mt-1">URL Google Sheet yang berisi data sekolah (untuk cetak barcode / referensi)</p>
+                </div>
+                <div class="border-t border-slate-200 pt-4 mt-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fa-brands fa-whatsapp text-green-600"></i>
+                        <h4 class="font-bold text-sm text-slate-700">WhatsApp API Settings</h4>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between bg-green-50 rounded-xl p-3">
+                            <div>
+                                <p class="text-sm font-semibold text-slate-700">Aktifkan WhatsApp Notifikasi</p>
+                                <p class="text-xs text-slate-400">Kirim otomatis ke orang tua saat absen</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="editSchoolWaEnabled" class="sr-only peer">
+                                <div class="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-500"></div>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-2">Provider API</label>
+                            <select id="editSchoolWaProvider" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
+                                <option value="">-- Pilih Provider --</option>
+                                <option value="fonnte">Fonnte (fonnte.com)</option>
+                                <option value="wablas">Wablas (wablas.com)</option>
+                                <option value="zenziva">Zenziva (zenziva.net)</option>
+                                <option value="twilio">Twilio</option>
+                                <option value="custom">Custom API</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-2">API Key / Token</label>
+                            <input type="text" id="editSchoolWaApiKey" placeholder="API Key dari provider WhatsApp" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
+                            <p class="text-[10px] text-slate-400 mt-1">Key rahasia dari provider WA yang Anda pilih</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-2">Nomor Sender / Device</label>
+                            <input type="text" id="editSchoolWaSender" placeholder="6281234567890" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
+                            <p class="text-[10px] text-slate-400 mt-1">Nomor WA pengirim (tanpa +, contoh: 6281234567890)</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-2">Custom Webhook URL (opsional)</label>
+                            <input type="text" id="editSchoolWaWebhook" placeholder="https://your-webhook-url.com/send" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
+                            <p class="text-[10px] text-slate-400 mt-1">Jika menggunakan Custom API, isi URL endpoint-nya di sini</p>
+                        </div>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 mb-2">Reset Password Admin</label>
