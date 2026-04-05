@@ -2,7 +2,7 @@
 // SMART ABSEN ENTERPRISE v2.0 - Aplikasi Absensi Profesional
 // ====================================================
 
-const GAS_URL = "URL_APPS_SCRIPT_ANDA_DISINI";
+
 
 // ===== 1. PWA & OFFLINE =====
 if ('serviceWorker' in navigator) {
@@ -188,7 +188,40 @@ function showPage(id) {
     allPages.forEach(p => { const el = document.getElementById(p); if(el) el.classList.add('hidden'); });
     const target = document.getElementById(id);
     if(target) { target.classList.remove('hidden'); target.classList.add('fade-in'); }
+
+function loadAllSettings() {
+    loadSettings();
+    loadProfileSettings();
+    renderJadwalList();
+    loadDatabaseConfig(); // Tambahkan pemanggilan ini
+}
+
+// Tambahkan blok fungsi Database ini tepat di bawah loadAllSettings()
+function getGasUrl() {
+    const dbConfig = JSON.parse(localStorage.getItem('dbConfig')) || {};
+    return dbConfig.gasUrl || ''; 
+}
+
+function getSheetCetakUrl() {
+    const dbConfig = JSON.parse(localStorage.getItem('dbConfig')) || {};
+    return dbConfig.sheetCetakUrl || '';
+}
+
+function loadDatabaseConfig() {
+    const dbConfig = JSON.parse(localStorage.getItem('dbConfig')) || {};
+    if(document.getElementById('inputGasUrl')) document.getElementById('inputGasUrl').value = dbConfig.gasUrl || '';
+    if(document.getElementById('inputSheetCetakUrl')) document.getElementById('inputSheetCetakUrl').value = dbConfig.sheetCetakUrl || '';
+}
+
+window.saveDatabaseConfig = function() {
+    const gasUrl = document.getElementById('inputGasUrl').value.trim();
+    const sheetCetakUrl = document.getElementById('inputSheetCetakUrl').value.trim();
+    if(!gasUrl) return showToast('URL Google Apps Script wajib diisi!', 'error');
     
+    localStorage.setItem('dbConfig', JSON.stringify({ gasUrl, sheetCetakUrl }));
+    showToast('Database berhasil dihubungkan!', 'success');
+};
+
     // Update sidebar active
     document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
     const activeLink = document.querySelector(`.sidebar-link[data-page="${id}"]`);
