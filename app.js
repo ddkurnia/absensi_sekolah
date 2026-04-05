@@ -63,7 +63,7 @@ let firebaseReady = false;
 let firebaseAppInstance = null;
 
 // School Config (from Firebase schools collection)
-let schoolConfig = null; // {gasUrl, sheetUrl, nama, sekolah, nip, isActive}
+// Includes WA API config set by Master Admin: {gasUrl, sheetUrl, nama, sekolah, nip, isActive, waEnabled, waProvider, waApiKey, waSender, waWebhook}
 
 // Data cache (synced from GAS)
 let siswaCache = [];
@@ -147,7 +147,7 @@ function updateFirebaseStatusUI() {
         if (firebaseReady) {
             sDot.className = 'w-3 h-3 rounded-full bg-green-300';
             sText.className = 'text-green-200';
-            sText.textContent = 'Firebase Brain: Online | GAS: ' + (schoolConfig && schoolConfig.gasUrl ? 'Terhubung' : 'Belum dikonfigurasi');
+            sText.textContent = 'Firebase Brain: Online | GAS: ' + (schoolConfig && schoolConfig.gasUrl ? 'Terhubung' : 'Belum dikonfigurasi') + ' | WA: ' + (schoolConfig && schoolConfig.waEnabled && schoolConfig.waApiKey ? 'Aktif' : 'Non-aktif');
         } else {
             sDot.className = 'w-3 h-3 rounded-full bg-white/30';
             sText.className = 'text-white/70';
@@ -508,6 +508,51 @@ async function gasDashboard() {
         return result.data;
     }
     return null;
+}
+
+// ===== 5b. WHATSAPP NOTIFICATION (via Master Admin config) =====
+// WA API config diset oleh Master Admin di Firebase, admin sekolah tidak bisa melihat/mengubah
+async function sendWaNotificationFromMaster(targetPhone, message) {
+    if (!schoolConfig || !schoolConfig.waEnabled || !schoolConfig.waApiKey) return false;
+    if (!targetPhone || targetPhone.length < 10) return false;
+
+    try {
+        if (schoolConfig.waProvider === 'fonnte') {
+            const res = await fetch('https://api.fonnte.com/send', {
+                method: 'POST',
+                headers: { 'Authorization': schoolConfig.waApiKey },
+                body: JSON.stringify({ target: targetPhone, message: message })
+            });
+            const result = await res.json();
+            return result.status === true;
+        } else if (schoolConfig.waProvider === 'wablas') {
+            const res = await fetch('https://ogo.wablas.com/api/send-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': schoolConfig.waApiKey },
+                body: JSON.stringify({ phone: targetPhone, message: message })
+            });
+            const result = await res.json();
+            return result.status === true || result.code === 200;
+        } else if (schoolConfig.waProvider === 'zenziva') {
+            const res = await fetch(`https://api.zenziva.net/v2/sendwa/${schoolConfig.waApiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `phonecode=${targetPhone}&message=${encodeURIComponent(message)}`
+            });
+            const result = await res.json();
+            return result.status === 'Success' || result.messageId;
+        } else if (schoolConfig.waProvider === 'custom' && schoolConfig.waWebhook) {
+            const res = await fetch(schoolConfig.waWebhook, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${schoolConfig.waApiKey}` },
+                body: JSON.stringify({ target: targetPhone, message: message, sender: schoolConfig.waSender || '' })
+            });
+            return res.ok;
+        }
+    } catch (e) {
+        console.error('sendWaNotificationFromMaster error:', e);
+    }
+    return false;
 }
 
 // ===== 6. TOAST NOTIFICATION =====
