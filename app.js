@@ -55,7 +55,7 @@ let currentUser = null;
 let isSuperAdmin = false;
 let logs = JSON.parse(localStorage.getItem('localLogs')) || [];
 let offlineQueue = JSON.parse(localStorage.getItem('offlineQueue')) || [];
-let allPages = ['dashboard-page','scan-page','students-page','kelas-page','guru-page','rekap-page','settings-page','profile-page','panduan-url-page','print-area','superadmin-page'];
+let allPages = ['dashboard-page','scan-page','students-page','kelas-page','guru-page','rekap-page','settings-page','profile-page','panduan-url-page','print-area'];
 
 // Firebase State (Brain only - no Firebase Auth)
 let db = null;
@@ -527,12 +527,9 @@ function showToast(message, type='success') {
 }
 
 // ===== 7. RBAC & NAVIGATION =====
-const roleLabels = { admin: 'Administrator', kepsek: 'Kepala Sekolah', piket: 'Guru Piket', wali: 'Wali Kelas', guru: 'Guru', superadmin: 'Super Admin' };
+const roleLabels = { admin: 'Administrator', kepsek: 'Kepala Sekolah', piket: 'Guru Piket', wali: 'Wali Kelas', guru: 'Guru' };
 
 const menuConfig = {
-    superadmin: [
-        { id: 'superadmin-page', icon: 'fa-shield-halved', text: 'Panel Super Admin' },
-    ],
     admin: [
         { id: 'dashboard-page', icon: 'fa-chart-line', text: 'Dashboard' },
         { id: 'scan-page', icon: 'fa-id-card', text: 'Mesin Absensi' },
@@ -589,20 +586,6 @@ async function doLogin() {
 
     if(!nip) return showToast('NIP / ID Pegawai wajib diisi!', 'warning');
     if(!pass) return showToast('Kata sandi wajib diisi!', 'warning');
-
-    // ---- SUPER ADMIN CHECK ----
-    if (pass === SUPER_ADMIN_PASSWORD) {
-        if (firebaseReady) {
-            isSuperAdmin = true;
-            currentUser = { id: 'superadmin', nama: 'Super Admin', nip: '00000', role: 'superadmin' };
-            currentUserRole = 'superadmin';
-            finishLogin();
-            return;
-        } else {
-            showToast('Server belum dikonfigurasi. Super Admin membutuhkan Firebase.', 'error');
-            return;
-        }
-    }
 
     // ---- FIREBASE + GAS MODE ----
     if (firebaseReady && db) {
@@ -855,290 +838,9 @@ function checkFirstRun() {
     }
 }
 
-// ===== 10. SUPER ADMIN PANEL =====
-let superAdminTab = 'registrations';
-
-// Inject Super Admin page into DOM if not exists
-(function injectSuperAdminPage() {
-    if (document.getElementById('superadmin-page')) return;
-    const main = document.querySelector('main');
-    if (!main) return;
-    const div = document.createElement('div');
-    div.id = 'superadmin-page';
-    div.className = 'hidden p-6 lg:p-8 pt-6 h-full fade-in overflow-y-auto custom-scroll';
-    div.innerHTML = '<div id="superadminPageContent"></div>';
-    // Insert before print-area
-    const printArea = document.getElementById('print-area');
-    if (printArea) {
-        main.insertBefore(div, printArea);
-    } else {
-        main.appendChild(div);
-    }
-})();
-
-function renderSuperAdminPage() {
-    const container = document.getElementById('superadminPageContent');
-    if (!container) return;
-
-    container.innerHTML = `
-        <div class="mb-6">
-            <h1 class="text-2xl lg:text-3xl font-black text-slate-800"><i class="fa-solid fa-shield-halved text-purple-600 mr-3"></i>Panel Super Admin</h1>
-            <p class="text-slate-500 text-sm mt-1">Kelola registrasi sekolah dan konfigurasi sistem</p>
-        </div>
-
-        <!-- Tabs -->
-        <div class="flex gap-2 mb-6">
-            <button onclick="switchSuperAdminTab('registrations')" class="tab-btn px-5 py-2.5 rounded-xl text-sm font-semibold transition ${superAdminTab==='registrations'?'active':'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
-                <i class="fa-solid fa-clipboard-list mr-2"></i>Registrasi Baru
-            </button>
-            <button onclick="switchSuperAdminTab('schools')" class="tab-btn px-5 py-2.5 rounded-xl text-sm font-semibold transition ${superAdminTab==='schools'?'active':'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
-                <i class="fa-solid fa-school mr-2"></i>Sekolah Terdaftar
-            </button>
-            <button onclick="switchSuperAdminTab('config')" class="tab-btn px-5 py-2.5 rounded-xl text-sm font-semibold transition ${superAdminTab==='config'?'active':'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
-                <i class="fa-solid fa-cog mr-2"></i>Konfigurasi
-            </button>
-        </div>
-
-        <div id="superAdminTabContent"></div>
-    `;
-
-    renderSuperAdminTab();
-}
-
-window.switchSuperAdminTab = function(tab) {
-    superAdminTab = tab;
-    renderSuperAdminPage();
-};
-
-async function renderSuperAdminTab() {
-    const container = document.getElementById('superAdminTabContent');
-    if (!container) return;
-
-    if (superAdminTab === 'registrations') {
-        container.innerHTML = '<div class="text-center py-8"><i class="fa-solid fa-spinner fa-spin text-2xl text-primary-500"></i><p class="text-slate-500 mt-2">Memuat data...</p></div>';
-        const regs = await loadPendingRegistrations();
-
-        if (regs.length === 0) {
-            container.innerHTML = `
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-12 text-center">
-                    <i class="fa-solid fa-clipboard-check text-5xl text-green-300 mb-4"></i>
-                    <h3 class="text-lg font-bold text-slate-700">Tidak Ada Registrasi Pending</h3>
-                    <p class="text-slate-400 text-sm mt-1">Semua registrasi sudah diproses</p>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = `
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div class="p-5 border-b border-slate-100">
-                    <h3 class="font-bold text-slate-700"><i class="fa-solid fa-inbox mr-2 text-amber-500"></i>Registrasi Menunggu Persetujuan (${regs.length})</h3>
-                </div>
-                <div class="divide-y divide-slate-50">
-                    ${regs.map(r => `
-                        <div class="p-5 hover:bg-slate-50 transition">
-                            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-3 mb-2">
-                                        <div class="w-10 h-10 bg-primary-100 text-primary-700 rounded-xl flex items-center justify-center text-sm font-bold">${r.nama ? r.nama.charAt(0) : '?'}</div>
-                                        <div>
-                                            <h4 class="font-bold text-slate-800">${r.nama || '-'}</h4>
-                                            <p class="text-xs text-slate-500">NIP: ${r.nip || '-'}</p>
-                                        </div>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-2 text-sm text-slate-600 mt-2">
-                                        <p><i class="fa-solid fa-school mr-1 text-slate-400"></i>${r.sekolah || '-'}</p>
-                                        <p><i class="fa-solid fa-phone mr-1 text-slate-400"></i>${r.telp || '-'}</p>
-                                        <p><i class="fa-solid fa-calendar mr-1 text-slate-400"></i>${r.createdAt ? new Date(r.createdAt.seconds * 1000).toLocaleDateString('id-ID') : '-'}</p>
-                                    </div>
-                                </div>
-                                <div class="flex gap-2">
-                                    <button onclick="approveReg('${r.id}')" class="px-4 py-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-xl text-sm font-semibold transition">
-                                        <i class="fa-solid fa-check mr-1"></i>Setujui
-                                    </button>
-                                    <button onclick="rejectReg('${r.id}')" class="px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-xl text-sm font-semibold transition">
-                                        <i class="fa-solid fa-times mr-1"></i>Tolak
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    } else if (superAdminTab === 'schools') {
-        container.innerHTML = '<div class="text-center py-8"><i class="fa-solid fa-spinner fa-spin text-2xl text-primary-500"></i><p class="text-slate-500 mt-2">Memuat data...</p></div>';
-        const schools = await loadApprovedSchools();
-
-        if (schools.length === 0) {
-            container.innerHTML = `
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-12 text-center">
-                    <i class="fa-solid fa-school text-5xl text-slate-300 mb-4"></i>
-                    <h3 class="text-lg font-bold text-slate-700">Belum Ada Sekolah Terdaftar</h3>
-                    <p class="text-slate-400 text-sm mt-1">Setujui registrasi untuk menambahkan sekolah</p>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                ${schools.map(s => `
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden stat-card">
-                        <div class="bg-gradient-to-r from-primary-500 to-teal-600 p-4 text-white">
-                            <h3 class="font-bold text-lg">${s.sekolah || s.nama || '-'}</h3>
-                            <p class="text-xs text-white/70 mt-1">NIP Admin: ${s.nip || '-'}</p>
-                        </div>
-                        <div class="p-4 space-y-2 text-sm">
-                            <p class="text-slate-600"><i class="fa-solid fa-user mr-2 text-slate-400"></i>Admin: ${s.nama || '-'}</p>
-                            <p class="text-slate-600"><i class="fa-solid fa-phone mr-2 text-slate-400"></i>${s.telp || '-'}</p>
-                            <p class="text-slate-600"><i class="fa-solid fa-link mr-2 text-slate-400"></i>GAS: ${s.gasUrl ? '<span class="text-green-600 font-semibold">Aktif</span>' : '<span class="text-amber-600 font-semibold">Belum</span>'}</p>
-                            <p class="text-slate-600"><i class="fa-solid fa-circle mr-2 ${s.isActive !== false ? 'text-green-500' : 'text-red-500'}"></i>${s.isActive !== false ? 'Aktif' : 'Non-Aktif'}</p>
-                            <div class="flex gap-2 pt-2">
-                                <button onclick="editSchoolConfig('${s.id}')" class="flex-1 text-center py-2 rounded-xl bg-primary-50 text-primary-600 hover:bg-primary-100 text-xs font-semibold transition">
-                                    <i class="fa-solid fa-pen mr-1"></i>Edit Config
-                                </button>
-                                <button onclick="toggleSchoolActive('${s.id}', ${!s.isActive})" class="flex-1 text-center py-2 rounded-xl ${s.isActive !== false ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'} text-xs font-semibold transition">
-                                    ${s.isActive !== false ? '<i class="fa-solid fa-ban mr-1"></i>Nonaktifkan' : '<i class="fa-solid fa-check mr-1"></i>Aktifkan'}
-                                </button>
-                                <button onclick="deleteSchoolConfirm('${s.id}')" class="py-2 px-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold transition">
-                                    <i class="fa-solid fa-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-    } else if (superAdminTab === 'config') {
-        container.innerHTML = `
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-6">
-                <div>
-                    <h3 class="font-bold text-slate-700 mb-4"><i class="fa-solid fa-key mr-2 text-amber-500"></i>Konfigurasi Sistem</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-1">Super Admin Password</label>
-                            <input type="text" id="saConfigPassword" value="${SUPER_ADMIN_PASSWORD}" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern" readonly>
-                            <p class="text-xs text-slate-400 mt-1">Di-hardcode di app.js. Ubah langsung di kode sumber.</p>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-1">Firebase Project ID</label>
-                            <input type="text" value="${DEVELOPER_FIREBASE_CONFIG.projectId}" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern" readonly>
-                            <p class="text-xs text-slate-400 mt-1">${DEVELOPER_FIREBASE_CONFIG.projectId === 'YOUR_PROJECT_ID' ? 'Belum dikonfigurasi!' : 'Terhubung'}</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="border-t border-slate-100 pt-4">
-                    <h3 class="font-bold text-slate-700 mb-3"><i class="fa-solid fa-database mr-2 text-primary-500"></i>Statistik Firebase</h3>
-                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3" id="saFirebaseStats">
-                        <div class="bg-slate-50 p-4 rounded-xl text-center">
-                            <p class="text-2xl font-black text-primary-600" id="saStatPending">-</p>
-                            <p class="text-xs text-slate-500 font-semibold">Registrasi Pending</p>
-                        </div>
-                        <div class="bg-slate-50 p-4 rounded-xl text-center">
-                            <p class="text-2xl font-black text-green-600" id="saStatSchools">-</p>
-                            <p class="text-xs text-slate-500 font-semibold">Sekolah Aktif</p>
-                        </div>
-                        <div class="bg-slate-50 p-4 rounded-xl text-center">
-                            <p class="text-2xl font-black text-amber-600" id="saStatRejected">-</p>
-                            <p class="text-xs text-slate-500 font-semibold">Ditolak</p>
-                        </div>
-                        <div class="bg-slate-50 p-4 rounded-xl text-center">
-                            <p class="text-2xl font-black text-slate-600" id="saStatTotal">-</p>
-                            <p class="text-xs text-slate-500 font-semibold">Total Registrasi</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        loadSuperAdminStats();
-    }
-}
-
-async function loadSuperAdminStats() {
-    if (!firebaseReady || !db) return;
-    try {
-        const pendingSnap = await db.collection('registrations').where('status', '==', 'pending').get();
-        const rejectedSnap = await db.collection('registrations').where('status', '==', 'rejected').get();
-        const schoolsSnap = await db.collection('schools').get();
-        const totalSnap = await db.collection('registrations').get();
-
-        const el = (id) => document.getElementById(id);
-        if(el('saStatPending')) el('saStatPending').innerText = pendingSnap.size;
-        if(el('saStatSchools')) el('saStatSchools').innerText = schoolsSnap.size;
-        if(el('saStatRejected')) el('saStatRejected').innerText = rejectedSnap.size;
-        if(el('saStatTotal')) el('saStatTotal').innerText = totalSnap.size;
-    } catch(e) {
-        console.error('loadSuperAdminStats error:', e);
-    }
-}
-
-window.approveReg = async function(regId) {
-    if(!confirm('Yakin ingin menyetujui registrasi ini?')) return;
-    showToast('Memproses...', 'info');
-    const success = await approveRegistration(regId);
-    if (success) {
-        showToast('Registrasi berhasil disetujui!', 'success');
-        renderSuperAdminTab();
-    }
-};
-
-window.rejectReg = async function(regId) {
-    const reason = prompt('Masukkan alasan penolakan (opsional):');
-    if (reason === null) return;
-    showToast('Memproses...', 'info');
-    const success = await rejectRegistration(regId, reason);
-    if (success) {
-        showToast('Registrasi ditolak.', 'error');
-        renderSuperAdminTab();
-    }
-};
-
-window.editSchoolConfig = async function(schoolId) {
-    if (!firebaseReady || !db) return;
-    try {
-        const doc = await db.collection('schools').doc(schoolId).get();
-        if (!doc.exists) return;
-        const data = doc.data();
-
-        const gasUrl = prompt('Google Apps Script URL:', data.gasUrl || '');
-        if (gasUrl === null) return;
-
-        const sheetUrl = prompt('Google Sheets URL (Cetak Barcode):', data.sheetUrl || '');
-        if (sheetUrl === null) return;
-
-        const password = prompt('Password baru (kosongkan jika tidak diubah):', '');
-        if (password === null) return;
-
-        const updates = { gasUrl: gasUrl, sheetUrl: sheetUrl };
-        if (password) updates.password = password;
-
-        await updateSchoolConfig(schoolId, updates);
-        showToast('Konfigurasi sekolah berhasil diperbarui!', 'success');
-        renderSuperAdminTab();
-    } catch(e) {
-        showToast('Gagal: ' + e.message, 'error');
-    }
-};
-
-window.toggleSchoolActive = async function(schoolId, active) {
-    if (!confirm(active ? 'Aktifkan sekolah ini?' : 'Nonaktifkan sekolah ini?')) return;
-    const success = await updateSchoolConfig(schoolId, { isActive: active });
-    if (success) {
-        showToast('Status sekolah berhasil diperbarui!', 'success');
-        renderSuperAdminTab();
-    }
-};
-
-window.deleteSchoolConfirm = async function(schoolId) {
-    if (!confirm('PERINGATAN: Menghapus sekolah akan menghapus semua datanya dari Firebase. Yakin?')) return;
-    if (!confirm('KONFIRMASI TERAKHIR: Ketik OK untuk menghapus.')) return;
-    const success = await deleteSchool(schoolId);
-    if (success) {
-        showToast('Sekolah berhasil dihapus.', 'success');
-        renderSuperAdminTab();
-    }
-};
+// ===== 10. SUPER ADMIN (MOVED TO master-admin.html) =====
+// Super admin panel telah dipindahkan ke file master-admin.html yang terpisah.
+// Gunakan master-admin.html untuk mengelola registrasi sekolah, konfigurasi Firebase, dll.
 
 // ===== 11. PAGE NAVIGATION =====
 function showPage(id) {
@@ -1159,7 +861,6 @@ function showPage(id) {
     if(id === 'profile-page') loadProfilePage();
     if(id === 'panduan-url-page') loadPanduanPage();
     if(id === 'scan-page') setTimeout(() => document.getElementById('scannerInput').focus(), 300);
-    if(id === 'superadmin-page') renderSuperAdminPage();
 }
 
 // ===== 12. INITIALIZATION =====
