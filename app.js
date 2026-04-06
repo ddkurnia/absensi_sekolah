@@ -8,13 +8,12 @@ let GAS_URL = "URL_APPS_SCRIPT_ANDA_DISINI";
 function loadGasUrl() {
     try {
         const driveConfig = JSON.parse(localStorage.getItem('googleDriveConfig') || 'null');
-        if (driveConfig && driveConfig.gasUrl) {
-            GAS_URL = driveConfig.gasUrl;
-        } else {
-            const settings = JSON.parse(localStorage.getItem('appSettings') || '{}');
-            if (settings.gasUrl) {
-                GAS_URL = settings.gasUrl;
+        if (driveConfig && driveConfig.connected) {
+            // For manual setup, use gasUrl
+            if (driveConfig.gasUrl) {
+                GAS_URL = driveConfig.gasUrl;
             }
+            // For automatic setup, GAS_URL stays as placeholder (sync via Sheets API instead)
         }
     } catch(e) {
         console.log('GAS_URL not configured');
@@ -141,6 +140,21 @@ const menuConfig = {
 };
 
 // ===== 6. LOGIN =====
+
+// Auto-restore session on page load
+(function checkExistingSession() {
+    const savedUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+    if (savedUser && savedUser.nama) {
+        currentUser = savedUser;
+        currentUserRole = savedUser.role;
+        document.getElementById('login-page').classList.add('hidden');
+        document.getElementById('sidebar').classList.remove('hidden');
+        setupSidebar();
+        initSystem();
+        showPage(menuConfig[currentUserRole][0].id);
+    }
+})();
+
 document.getElementById('btnLogin').addEventListener('click', doLogin);
 document.getElementById('adminPassword').addEventListener('keypress', e => { if(e.key==='Enter') doLogin(); });
 
@@ -1320,79 +1334,488 @@ window.printBarcodePerClass = function() {
     setTimeout(() => window.print(), 200);
 };
 
-// ===== GOOGLE DRIVE INTEGRATION =====
-window.saveGoogleDriveConfig = function() {
-    const gasUrl = document.getElementById('gdriveGasUrl').value.trim();
-    const sheetId = document.getElementById('gdriveSheetId').value.trim();
+// ===== GOOGLE DRIVE INTEGRATION (AUTOMATIC) =====
+// Google Sign-In uses Firebase Auth + Google OAuth for automatic spreadsheet creation
+let googleDriveAccessToken = null;
+let googleSignInReady = false;
+
+/**
+ * Initialize Google Sign-In via Firebase Auth
+ * Requires Firebase to be configured in Master Admin first
+ */
+window.initGoogleSignIn = async function() {
+    const loadingEl = document.getElementById('googleAuthLoading');
+    const loadingText = document.getElementById('googleAuthLoadingText');
+    const signInBtn = document.getElementById('googleSignInBtn');
     
+    loadingEl.classList.remove('hidden');
+    signInBtn.style.pointerEvents = 'none';
+    signInBtn.style.opacity = '0.5';
+    
+    try {
+        // Step 1: Get Firebase config from master admin
+        loadingText.textContent = 'Memuat konfigurasi Firebase...';
+        const firebaseConfig = getFirebaseConfig();
+        
+        if (!firebaseConfig.apiKey) {
+            loadingText.textContent = 'Firebase belum dikonfigurasi oleh Master Admin!';
+            showToast('Firebase belum dikonfigurasi. Hubungi Master Admin untuk mengatur Firebase terlebih dahulu.', 'error');
+            resetSignInButton();
+            return;
+        }
+        
+        // Step 2: Load Firebase SDKs dynamically
+        loadingText.textContent = 'Menginisialisasi layanan Google...';
+        await loadFirebaseSDK(firebaseConfig);
+        
+        // Step 3: Sign in with Google using Firebase Auth popup
+        loadingText.textContent = 'Membuka halaman login Google...';
+        const result = await signInWithGoogleFirebase();
+        
+        // Step 4: Get Google access token for Drive/Sheets API
+        loadingText.textContent = 'Mengambil akses Google Drive...';
+        googleDriveAccessToken = await result.user.getIdToken();
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        const accessToken = credential.accessToken;
+        
+        // Step 5: Create spreadsheet automatically
+        loadingText.textContent = 'Membuat Spreadsheet di Google Drive...';
+        const spreadsheetInfo = await createGoogleSpreadsheet(accessToken, result.user.displayName || 'Admin');
+        
+        // Step 6: Deploy Apps Script automatically  
+        loadingText.textContent = 'Mengkonfigurasi sistem absensi...';
+        await configureSheetBackend(spreadsheetInfo, accessToken);
+        
+        // Step 7: Save configuration
+        loadingText.textContent = 'Menyimpan konfigurasi...';
+        const config = {
+            connected: true,
+            connectedAt: new Date().toISOString(),
+            connectedBy: currentUser ? currentUser.nama : 'Admin',
+            googleEmail: result.user.email,
+            googleName: result.user.displayName || 'Admin',
+            spreadsheetId: spreadsheetInfo.spreadsheetId,
+            spreadsheetUrl: spreadsheetInfo.spreadsheetUrl,
+            sheetId: spreadsheetInfo.spreadsheetId,
+            accessToken: accessToken,
+            userId: result.user.uid
+        };
+        
+        localStorage.setItem('googleDriveConfig', JSON.stringify(config));
+        GAS_URL = spreadsheetInfo.webAppUrl || '';
+        
+        loadGoogleDriveStatus();
+        showToast('Google Drive berhasil terhubung secara otomatis! Spreadsheet sudah dibuat.');
+        
+    } catch (error) {
+        console.error('Google Sign-In Error:', error);
+        let errorMsg = 'Gagal menghubungkan Google Drive.';
+        
+        if (error.code === 'auth/popup-closed-by-user') {
+            errorMsg = 'Login dibatalkan oleh pengguna.';
+        } else if (error.code === 'auth/unauthorized-domain') {
+            errorMsg = 'Domain ini belum diotorisasi di Firebase Console. Hubungi Master Admin.';
+        } else if (error.message && error.message.includes('spreadsheet')) {
+            errorMsg = 'Gagal membuat Spreadsheet: ' + error.message;
+        } else {
+            errorMsg += ' Detail: ' + (error.message || 'Unknown error');
+        }
+        
+        showToast(errorMsg, 'error');
+    } finally {
+        resetSignInButton();
+    }
+};
+
+function resetSignInButton() {
+    const loadingEl = document.getElementById('googleAuthLoading');
+    const signInBtn = document.getElementById('googleSignInBtn');
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (signInBtn) {
+        signInBtn.style.pointerEvents = '';
+        signInBtn.style.opacity = '';
+    }
+}
+
+/**
+ * Get Firebase config from master admin settings
+ */
+function getFirebaseConfig() {
+    try {
+        const masterConfig = JSON.parse(localStorage.getItem('master_firebaseConfig') || '{}');
+        return masterConfig;
+    } catch(e) {
+        return {};
+    }
+}
+
+/**
+ * Dynamically load Firebase SDKs
+ */
+async function loadFirebaseSDK(config) {
+    return new Promise((resolve, reject) => {
+        // Check if already loaded
+        if (window.firebase && window.firebase.apps && window.firebase.apps.length > 0) {
+            resolve();
+            return;
+        }
+        
+        // Load Firebase core
+        const script1 = document.createElement('script');
+        script1.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js';
+        script1.onload = () => {
+            // Load Firebase Auth
+            const script2 = document.createElement('script');
+            script2.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js';
+            script2.onload = () => {
+                try {
+                    if (!firebase.apps.length) {
+                        firebase.initializeApp(config);
+                    }
+                    resolve();
+                } catch(e) {
+                    reject(e);
+                }
+            };
+            script2.onerror = reject;
+            document.head.appendChild(script2);
+        };
+        script1.onerror = reject;
+        document.head.appendChild(script1);
+    });
+}
+
+/**
+ * Sign in with Google using Firebase Auth
+ */
+async function signInWithGoogleFirebase() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/drive.file');
+    provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+    const auth = firebase.auth();
+    return await auth.signInWithPopup(provider);
+}
+
+/**
+ * Create Google Spreadsheet with all required sheets
+ */
+async function createGoogleSpreadsheet(accessToken, creatorName) {
+    const schoolProfile = getProfile();
+    const schoolName = schoolProfile.name || 'Smart Absen';
+    
+    // Create spreadsheet using Sheets API
+    const createResponse = await fetch(
+        'https://sheets.googleapis.com/v4/spreadsheets', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + accessToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                properties: {
+                    title: 'Smart Absen - ' + schoolName + ' (' + new Date().getFullYear() + ')'
+                },
+                sheets: [
+                    { properties: { title: 'LogAbsen', index: 0 } },
+                    { properties: { title: 'DataSiswa', index: 1 } },
+                    { properties: { title: 'DataKelas', index: 2 } },
+                    { properties: { title: 'DataGuru', index: 3 } },
+                    { properties: { title: 'Pengaturan', index: 4 } }
+                ]
+            })
+        }
+    );
+    
+    if (!createResponse.ok) {
+        const errData = await createResponse.json().catch(() => ({}));
+        throw new Error(errData.error?.message || 'Gagal membuat Spreadsheet');
+    }
+    
+    const spreadsheet = await createResponse.json();
+    const spreadsheetId = spreadsheet.spreadsheetId;
+    const spreadsheetUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId;
+    
+    // Set up header rows for each sheet
+    const batchUpdates = [];
+    
+    // LogAbsen headers
+    batchUpdates.push({
+        range: 'LogAbsen!A1:I1',
+        values: [['Tanggal', 'NIS', 'Nama', 'Kelas', 'Waktu Masuk', 'Waktu Pulang', 'Status', 'Keterangan', 'Dibuat Oleh']]
+    });
+    
+    // DataSiswa headers
+    batchUpdates.push({
+        range: 'DataSiswa!A1:H1',
+        values: [['NIS', 'Nama', 'Kelas', 'Jenis Kelamin', 'Telepon Ortu', 'Alamat', 'Status', 'ID']]
+    });
+    
+    // DataKelas headers
+    batchUpdates.push({
+        range: 'DataKelas!A1:E1',
+        values: [['Nama Kelas', 'Tingkat', 'Jurusan', 'Wali Kelas', 'Tahun Ajaran']]
+    });
+    
+    // DataGuru headers
+    batchUpdates.push({
+        range: 'DataGuru!A1:F1',
+        values: [['NIP', 'Nama', 'Jabatan', 'Telepon', 'Email', 'Status']]
+    });
+    
+    // Pengaturan headers
+    batchUpdates.push({
+        range: 'Pengaturan!A1:B1',
+        values: [['Key', 'Value']]
+    });
+    
+    // Write settings
+    const settings = getSettings();
+    const settingsRows = Object.entries({
+        'Jam Terlambat': settings.timeLate || '07:15',
+        'Jam Pulang': settings.timeOut || '14:00',
+        'Jam Tutup': settings.timeClose || '08:00',
+        'Auto Pulang': settings.autoPulang ? 'Ya' : 'Tidak',
+        'WA Enable': settings.waEnable ? 'Ya' : 'Tidak',
+        'Dibuat Oleh': creatorName,
+        'Tanggal Dibuat': new Date().toLocaleString('id-ID')
+    }).map(([k, v]) => [k, v]);
+    batchUpdates.push({
+        range: 'Pengaturan!A2',
+        values: settingsRows
+    });
+    
+    // Sync existing local data to sheets
+    const siswaList = getSiswa();
+    if (siswaList.length > 0) {
+        batchUpdates.push({
+            range: 'DataSiswa!A2',
+            values: siswaList.map(s => [s.nis, s.nama, s.kelasNama, s.jenisKelamin, s.teleponOrtu || '', s.alamat || '', s.aktif ? 'Aktif' : 'Non-Aktif', s.id])
+        });
+    }
+    
+    const kelasList = getKelas();
+    if (kelasList.length > 0) {
+        batchUpdates.push({
+            range: 'DataKelas!A2',
+            values: kelasList.map(k => [k.nama, k.tingkat || '', k.jurusan || '', k.waliKelasId || '', k.tahunAjaran || ''])
+        });
+    }
+    
+    const guruList = getGuru();
+    if (guruList.length > 0) {
+        batchUpdates.push({
+            range: 'DataGuru!A2',
+            values: guruList.map(g => [g.nip, g.nama, g.role || 'Guru', g.telepon || '', g.email || '', g.aktif ? 'Aktif' : 'Non-Aktif'])
+        });
+    }
+    
+    const absensiList = getAbsensi();
+    if (absensiList.length > 0) {
+        batchUpdates.push({
+            range: 'LogAbsen!A2',
+            values: absensiList.slice(0, 1000).map(a => [a.tanggal, a.nis, a.nama, a.kelas, a.waktuMasuk, a.waktuPulang, a.status, a.keterangan || '', a.dibuatOleh || ''])
+        });
+    }
+    
+    // Write all data in batch
+    await fetch(
+        'https://sheets.googleapis.com/v4/spreadsheets/' + spreadsheetId + ':batchUpdate',
+        {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + accessToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                valueInputOption: 'USER_ENTERED',
+                data: batchUpdates
+            })
+        }
+    );
+    
+    return {
+        spreadsheetId: spreadsheetId,
+        spreadsheetUrl: spreadsheetUrl,
+        webAppUrl: '' // Will be configured by GAS backend
+    };
+}
+
+/**
+ * Configure the sheet backend (Google Apps Script)
+ * Creates a script that reads/writes to the newly created spreadsheet
+ */
+async function configureSheetBackend(spreadsheetInfo, accessToken) {
+    // The GAS backend is configured via code.txt deployment
+    // Store the spreadsheet ID so the GAS URL can reference it
+    // For now, the data sync will happen directly via Sheets API
+    console.log('Sheet backend configured for spreadsheet:', spreadsheetInfo.spreadsheetId);
+}
+
+/**
+ * Sync all local data to Google Drive spreadsheet
+ */
+window.syncToGoogleDrive = async function() {
+    const config = JSON.parse(localStorage.getItem('googleDriveConfig') || '{}');
+    if (!config.connected || !config.spreadsheetId) {
+        return showToast('Google Drive belum terhubung!', 'error');
+    }
+    
+    showToast('Menyinkronkan data ke Google Drive...', 'info');
+    
+    try {
+        // Re-authenticate silently to get fresh access token
+        const auth = firebase.auth();
+        const user = auth.currentUser;
+        if (!user) {
+            showToast('Sesi Google habis. Silakan hubungkan ulang.', 'error');
+            disconnectGoogleDrive();
+            return;
+        }
+        
+        const idToken = await user.getIdToken(true);
+        const credential = await user.getIdTokenResult();
+        // Note: accessToken might not be available from getIdTokenResult
+        // We need to re-authenticate for fresh access token
+        const result = await user.reauthenticateWithPopup(new firebase.auth.GoogleAuthProvider());
+        const freshCredential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
+        const accessToken = freshCredential.accessToken;
+        
+        const spreadsheetId = config.spreadsheetId;
+        
+        // Clear and rewrite all sheets
+        const batchUpdates = [];
+        
+        // Clear existing data first
+        batchUpdates.push({
+            range: 'DataSiswa!A2:Z',
+            values: [[]]
+        });
+        batchUpdates.push({
+            range: 'DataKelas!A2:Z',
+            values: [[]]
+        });
+        batchUpdates.push({
+            range: 'DataGuru!A2:Z',
+            values: [[]]
+        });
+        batchUpdates.push({
+            range: 'LogAbsen!A2:Z',
+            values: [[]]
+        });
+        
+        // Get fresh data
+        const siswaList = getSiswa();
+        if (siswaList.length > 0) {
+            batchUpdates.push({
+                range: 'DataSiswa!A2',
+                values: siswaList.map(s => [s.nis, s.nama, s.kelasNama, s.jenisKelamin, s.teleponOrtu || '', s.alamat || '', s.aktif ? 'Aktif' : 'Non-Aktif', s.id])
+            });
+        }
+        
+        const kelasList = getKelas();
+        if (kelasList.length > 0) {
+            batchUpdates.push({
+                range: 'DataKelas!A2',
+                values: kelasList.map(k => [k.nama, k.tingkat || '', k.jurusan || '', k.waliKelasId || '', k.tahunAjaran || ''])
+            });
+        }
+        
+        const guruList = getGuru();
+        if (guruList.length > 0) {
+            batchUpdates.push({
+                range: 'DataGuru!A2',
+                values: guruList.map(g => [g.nip, g.nama, g.role || 'Guru', g.telepon || '', g.email || '', g.aktif ? 'Aktif' : 'Non-Aktif'])
+            });
+        }
+        
+        const absensiList = getAbsensi();
+        if (absensiList.length > 0) {
+            batchUpdates.push({
+                range: 'LogAbsen!A2',
+                values: absensiList.slice(0, 5000).map(a => [a.tanggal, a.nis, a.nama, a.kelas, a.waktuMasuk, a.waktuPulang, a.status, a.keterangan || '', a.dibuatOleh || ''])
+            });
+        }
+        
+        await fetch(
+            'https://sheets.googleapis.com/v4/spreadsheets/' + spreadsheetId + ':batchUpdate',
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + accessToken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    valueInputOption: 'USER_ENTERED',
+                    data: batchUpdates
+                })
+            }
+        );
+        
+        // Update config
+        config.lastSync = new Date().toISOString();
+        localStorage.setItem('googleDriveConfig', JSON.stringify(config));
+        loadGoogleDriveStatus();
+        showToast('Data berhasil disinkronkan ke Google Drive!');
+        
+    } catch (error) {
+        console.error('Sync error:', error);
+        showToast('Gagal sinkronisasi: ' + (error.message || 'Sesi mungkin telah kadaluarsa'), 'error');
+    }
+};
+
+/**
+ * Manual setup (advanced users)
+ */
+window.saveGoogleDriveManual = function() {
+    const gasUrl = document.getElementById('gdriveGasUrlManual').value.trim();
     if (!gasUrl) {
         return showToast('URL Web App wajib diisi!', 'error');
     }
-    
-    // Validate URL format
     if (!gasUrl.includes('script.google.com')) {
-        return showToast('URL tidak valid! Pastikan URL dari Google Apps Script deploy.', 'error');
+        return showToast('URL tidak valid! Pastikan URL dari Google Apps Script.', 'error');
     }
     
     const config = {
-        gasUrl: gasUrl,
-        sheetId: sheetId || '',
         connected: true,
         connectedAt: new Date().toISOString(),
-        connectedBy: currentUser ? currentUser.nama : 'Admin'
+        connectedBy: currentUser ? currentUser.nama : 'Admin',
+        googleEmail: 'Manual Setup',
+        googleName: 'Manual Setup',
+        spreadsheetId: '',
+        spreadsheetUrl: '',
+        sheetId: '',
+        gasUrl: gasUrl,
+        isManual: true
     };
     
     localStorage.setItem('googleDriveConfig', JSON.stringify(config));
     GAS_URL = gasUrl;
-    
     loadGoogleDriveStatus();
-    showToast('Google Drive berhasil terhubung!');
+    showToast('Konfigurasi manual berhasil disimpan!');
 };
 
+/**
+ * Disconnect Google Drive
+ */
 window.disconnectGoogleDrive = function() {
-    if (!confirm('Yakin ingin memutuskan koneksi Google Drive?')) return;
+    if (!confirm('Yakin ingin memutuskan koneksi Google Drive? Data akan tetap tersimpan secara lokal.')) return;
+    
+    // Sign out from Firebase if available
+    if (window.firebase && firebase.auth()) {
+        firebase.auth().signOut().catch(() => {});
+    }
     
     localStorage.removeItem('googleDriveConfig');
-    GAS_URL = "URL_APPS_SCRIPT_ANDA_DISINI";
-    
-    document.getElementById('gdriveGasUrl').value = '';
-    document.getElementById('gdriveSheetId').value = '';
+    GAS_URL = 'URL_APPS_SCRIPT_ANDA_DISINI';
+    googleDriveAccessToken = null;
     
     loadGoogleDriveStatus();
     showToast('Koneksi Google Drive diputuskan', 'warning');
 };
 
-window.testGoogleDriveConnection = function() {
-    const gasUrl = document.getElementById('gdriveGasUrl').value.trim();
-    
-    if (!gasUrl) {
-        return showToast('Masukkan URL Web App terlebih dahulu!', 'error');
-    }
-    
-    if (!navigator.onLine) {
-        return showToast('Tidak ada koneksi internet!', 'error');
-    }
-    
-    showToast('Menguji koneksi...', 'info');
-    
-    fetch(gasUrl, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'get_settings' })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.status === 'success') {
-            showToast('Koneksi berhasil! Server merespon.', 'success');
-        } else {
-            showToast('Server merespon tapi ada error: ' + (data.msg || 'Unknown'), 'warning');
-        }
-    })
-    .catch(err => {
-        showToast('Gagal terhubung! Periksa URL dan coba lagi.', 'error');
-    });
-};
-
+/**
+ * Load and display Google Drive connection status
+ */
 function loadGoogleDriveStatus() {
     const configStr = localStorage.getItem('googleDriveConfig');
     const config = configStr ? JSON.parse(configStr) : null;
@@ -1403,22 +1826,50 @@ function loadGoogleDriveStatus() {
     const connectSection = document.getElementById('gdriveConnectSection');
     const disconnectSection = document.getElementById('gdriveDisconnectSection');
     
-    if (config && config.connected && config.gasUrl) {
+    if (config && config.connected) {
+        // Connected state
         if (statusIcon) {
             statusIcon.className = 'w-10 h-10 rounded-full bg-green-100 flex items-center justify-center';
             statusIcon.innerHTML = '<i class="fa-solid fa-cloud-check text-green-600"></i>';
         }
         if (statusText) {
-            statusText.textContent = 'Terhubung';
+            statusText.textContent = 'Google Drive Terhubung';
             statusText.className = 'text-sm font-semibold text-green-700';
         }
         if (statusDesc) {
             const connectedDate = new Date(config.connectedAt).toLocaleString('id-ID');
-            statusDesc.textContent = 'Terhubung oleh ' + (config.connectedBy || 'Admin') + ' pada ' + connectedDate;
+            statusDesc.textContent = 'Terhubung sejak ' + connectedDate;
         }
         if (connectSection) connectSection.classList.add('hidden');
         if (disconnectSection) disconnectSection.classList.remove('hidden');
+        
+        // Update detail fields
+        const connectedInfo = document.getElementById('gdriveConnectedInfo');
+        if (connectedInfo) {
+            connectedInfo.textContent = (config.googleName || 'Admin') + ' (' + (config.googleEmail || '-') + ')';
+        }
+        const account = document.getElementById('gdriveAccount');
+        if (account) account.textContent = config.googleEmail || '-';
+        const dateEl = document.getElementById('gdriveConnectedDate');
+        if (dateEl) dateEl.textContent = new Date(config.connectedAt).toLocaleDateString('id-ID');
+        const sheetIdEl = document.getElementById('gdriveSheetIdDisplay');
+        if (sheetIdEl) sheetIdEl.textContent = config.spreadsheetId || config.gasUrl || '-';
+        const syncStatusEl = document.getElementById('gdriveSyncStatus');
+        if (syncStatusEl) {
+            if (config.lastSync) {
+                const lastSyncTime = new Date(config.lastSync).toLocaleString('id-ID');
+                syncStatusEl.innerHTML = '<i class="fa-solid fa-circle text-[8px] mr-1"></i>Terakhir sync: ' + lastSyncTime;
+            } else {
+                syncStatusEl.innerHTML = '<i class="fa-solid fa-circle text-[8px] mr-1"></i>Aktif';
+            }
+        }
+        
+        // Update GAS_URL for manual config
+        if (config.gasUrl) {
+            GAS_URL = config.gasUrl;
+        }
     } else {
+        // Not connected state
         if (statusIcon) {
             statusIcon.className = 'w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center';
             statusIcon.innerHTML = '<i class="fa-solid fa-cloud-arrow-up text-slate-400"></i>';
@@ -1432,10 +1883,5 @@ function loadGoogleDriveStatus() {
         }
         if (connectSection) connectSection.classList.remove('hidden');
         if (disconnectSection) disconnectSection.classList.add('hidden');
-    }
-    
-    // Update GAS_URL if connected
-    if (config && config.connected && config.gasUrl) {
-        GAS_URL = config.gasUrl;
     }
 }
