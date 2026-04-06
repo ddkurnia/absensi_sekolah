@@ -1357,26 +1357,46 @@ window.initGoogleSignIn = async function() {
         loadingText.textContent = 'Memuat konfigurasi Firebase...';
         const firebaseConfig = getFirebaseConfig();
         
-        if (!firebaseConfig.apiKey) {
-            loadingText.textContent = 'Firebase belum dikonfigurasi oleh Master Admin!';
-            showToast('Firebase belum dikonfigurasi. Hubungi Master Admin untuk mengatur Firebase terlebih dahulu.', 'error');
+        if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+            loadingText.textContent = 'Firebase belum dikonfigurasi!';
+            showToast('Firebase belum dikonfigurasi oleh Master Admin. Hubungi pemilik aplikasi.', 'error');
             resetSignInButton();
             return;
         }
         
+        console.log('[GoogleSignIn] Firebase config found:', firebaseConfig.projectId);
+        
         // Step 2: Load Firebase SDKs dynamically
-        loadingText.textContent = 'Menginisialisasi layanan Google...';
+        loadingText.textContent = 'Memuat Firebase SDK...';
         await loadFirebaseSDK(firebaseConfig);
+        console.log('[GoogleSignIn] Firebase SDK loaded successfully');
+        
+        // Double-check firebase.auth is available
+        if (typeof firebase === 'undefined' || !firebase.auth) {
+            throw new Error('Firebase Auth SDK gagal dimuat. Pastikan tidak ada extension browser yang memblokir script dari gstatic.com');
+        }
         
         // Step 3: Sign in with Google using Firebase Auth popup
         loadingText.textContent = 'Membuka halaman login Google...';
         const result = await signInWithGoogleFirebase();
+        console.log('[GoogleSignIn] User signed in:', result.user.email);
         
         // Step 4: Get Google access token for Drive/Sheets API
         loadingText.textContent = 'Mengambil akses Google Drive...';
         googleDriveAccessToken = await result.user.getIdToken();
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        const accessToken = credential.accessToken;
+        
+        let accessToken = null;
+        try {
+            const credential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
+            accessToken = credential.accessToken;
+        } catch(e) {
+            console.warn('[GoogleSignIn] Could not get access token, trying getIdToken instead');
+            accessToken = googleDriveAccessToken;
+        }
+        
+        if (!accessToken) {
+            throw new Error('Gagal mendapatkan akses token dari Google. Coba lagi.');
+        }
         
         // Step 5: Create spreadsheet automatically
         loadingText.textContent = 'Membuat Spreadsheet di Google Drive...';
@@ -1452,36 +1472,60 @@ function getFirebaseConfig() {
 /**
  * Dynamically load Firebase SDKs
  */
+let _firebaseSDKLoaded = false;
+
 async function loadFirebaseSDK(config) {
+    // Jika sudah pernah load lengkap, skip
+    if (_firebaseSDKLoaded && window.firebase && firebase.apps && firebase.apps.length > 0 && firebase.auth) {
+        return;
+    }
+    _firebaseSDKLoaded = false;
+
     return new Promise((resolve, reject) => {
-        // Check if already loaded
-        if (window.firebase && window.firebase.apps && window.firebase.apps.length > 0) {
-            resolve();
-            return;
+        // Cek apakah firebase-app sudah ada di halaman
+        function loadScript(url, isModule) {
+            return new Promise((res, rej) => {
+                // Cek apakah script sudah ada
+                const existing = document.querySelector('script[src="' + url + '"]');
+                if (existing) { res(); return; }
+                const s = document.createElement('script');
+                s.src = url;
+                s.onload = res;
+                s.onerror = () => rej(new Error('Gagal memuat: ' + url));
+                document.head.appendChild(s);
+            });
         }
-        
-        // Load Firebase core
-        const script1 = document.createElement('script');
-        script1.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js';
-        script1.onload = () => {
-            // Load Firebase Auth
-            const script2 = document.createElement('script');
-            script2.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js';
-            script2.onload = () => {
+
+        loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js')
+            .then(() => {
+                console.log('[Firebase] firebase-app loaded');
+                return loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js');
+            })
+            .then(() => {
+                console.log('[Firebase] firebase-auth loaded');
+                // Verifikasi firebase.auth tersedia
+                if (!firebase.auth) {
+                    reject(new Error('Firebase Auth SDK tidak tersedia. Pastikan koneksi internet stabil.'));
+                    return;
+                }
                 try {
-                    if (!firebase.apps.length) {
+                    if (!firebase.apps || firebase.apps.length === 0) {
                         firebase.initializeApp(config);
+                        console.log('[Firebase] App initialized for project:', config.projectId);
                     }
+                    _firebaseSDKLoaded = true;
                     resolve();
                 } catch(e) {
-                    reject(e);
+                    if (e.code === 'app/duplicate-app') {
+                        // Sudah di-initialize, itu ok
+                        _firebaseSDKLoaded = true;
+                        resolve();
+                    } else {
+                        reject(e);
+                    }
                 }
-            };
-            script2.onerror = reject;
-            document.head.appendChild(script2);
-        };
-        script1.onerror = reject;
-        document.head.appendChild(script1);
+            })
+            .catch(err => reject(err));
     });
 }
 
@@ -1489,6 +1533,11 @@ async function loadFirebaseSDK(config) {
  * Sign in with Google using Firebase Auth
  */
 async function signInWithGoogleFirebase() {
+    // Pastikan firebase.auth tersedia
+    if (!firebase || !firebase.auth) {
+        throw new Error('Firebase Auth belum siap. Coba refresh halaman dan coba lagi.');
+    }
+
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/drive.file');
     provider.addScope('https://www.googleapis.com/auth/spreadsheets');
