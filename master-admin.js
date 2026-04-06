@@ -1420,16 +1420,26 @@ function saveFirebaseConfig() {
         databaseURL: document.getElementById('fbDatabaseURL').value.trim()
     };
 
+    if (!config.apiKey || !config.projectId) {
+        showWarning('Minimal API Key dan Project ID wajib diisi!');
+        return;
+    }
+
     localStorage.setItem(LS_FIREBASE, JSON.stringify(config));
-    addActivityLog('save_firebase', 'Menyimpan konfigurasi Firebase (Project: ' + (config.projectId || 'N/A') + ')');
-    showSuccess('Konfigurasi Firebase berhasil disimpan!');
+    addActivityLog('save_firebase', 'Menyimpan konfigurasi Firebase (Project: ' + config.projectId + ')');
+    showSuccess('Konfigurasi Firebase berhasil disimpan! Menguji koneksi...');
 
     // Update status
     loadFirebaseConfig();
+
+    // Auto test koneksi setelah simpan
+    setTimeout(function() {
+        testFirebaseConnection();
+    }, 500);
 }
 
 /** Test koneksi Firebase */
-function testFirebaseConnection() {
+async function testFirebaseConnection() {
     const config = getFirebaseConfig();
 
     if (!config.apiKey || !config.projectId) {
@@ -1437,9 +1447,56 @@ function testFirebaseConnection() {
         return;
     }
 
-    showInfo('Fitur test koneksi Firebase akan tersedia setelah integrasi penuh dengan Firebase SDK. Saat ini hanya menyimpan konfigurasi di localStorage.');
+    showInfo('Menguji koneksi ke Firebase...');
 
-    addActivityLog('test_firebase', 'Test koneksi Firebase (Project: ' + config.projectId + ')');
+    try {
+        // Load Firebase SDK dynamically
+        if (!window.firebase || !firebase.apps || !firebase.apps.length) {
+            await new Promise((resolve, reject) => {
+                const s1 = document.createElement('script');
+                s1.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js';
+                s1.onload = () => {
+                    const s2 = document.createElement('script');
+                    s2.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js';
+                    s2.onload = () => {
+                        try {
+                            if (!firebase.apps.length) firebase.initializeApp(config);
+                            resolve();
+                        } catch(e) { reject(e); }
+                    };
+                    s2.onerror = () => reject(new Error('Gagal memuat Firebase Auth SDK'));
+                    document.head.appendChild(s2);
+                };
+                s1.onerror = () => reject(new Error('Gagal memuat Firebase SDK'));
+                document.head.appendChild(s1);
+            });
+        }
+
+        // Test: try to fetch Auth settings from Firebase
+        const auth = firebase.auth();
+        const response = await fetch('https://identitytoolkit.googleapis.com/v1/projects/' + config.projectId + '/accounts:createAuthUri?key=' + config.apiKey, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                identifier: 'test@example.com',
+                continueUri: window.location.href
+            })
+        });
+
+        if (response.ok || response.status === 400) {
+            // 400 is expected (test email not registered) but it means Firebase is reachable
+            showSuccess('Koneksi Firebase BERHASIL! Project "' + config.projectId + '" terhubung dengan baik.');
+            addActivityLog('test_firebase', 'Test koneksi Firebase BERHASIL (Project: ' + config.projectId + ')');
+        } else {
+            const errData = await response.json().catch(() => ({}));
+            showError('Gagal terhubung ke Firebase. Pastikan API Key dan Project ID benar. Error: ' + (errData.error?.message || response.statusText));
+            addActivityLog('test_firebase', 'Test koneksi Firebase GAGAL (Project: ' + config.projectId + ')');
+        }
+
+    } catch (error) {
+        showError('Gagal menguji koneksi: ' + error.message);
+        addActivityLog('test_firebase', 'Test koneksi Firebase GAGAL: ' + error.message);
+    }
 }
 
 // ============================================
