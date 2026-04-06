@@ -1384,18 +1384,31 @@ window.initGoogleSignIn = async function() {
         const result = await signInWithGoogleFirebase();
         console.log('[GoogleSignIn] User signed in:', result.user.email);
         
-        // Step 4: Get Google access token for Drive/Sheets API
+        // Step 4: Get Google OAuth access token for Drive/Sheets API
         loadingText.textContent = 'Mengambil akses Google Drive...';
-        googleDriveAccessToken = await result.user.getIdToken();
-        
         let accessToken = null;
-        try {
-            const credential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
-            accessToken = credential.accessToken;
-        } catch(e) {
-            console.warn('[GoogleSignIn] Could not get access token, trying getIdToken instead');
-            accessToken = googleDriveAccessToken;
+        
+        // Di Firebase compat SDK, token OAuth ada di result.credential.accessToken
+        if (result.credential && result.credential.accessToken) {
+            accessToken = result.credential.accessToken;
+            console.log('[GoogleSignIn] OAuth access token obtained from credential');
+        } else {
+            // Fallback: coba via credentialFromResult
+            try {
+                const credential = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
+                accessToken = credential.accessToken;
+                console.log('[GoogleSignIn] OAuth access token obtained via credentialFromResult');
+            } catch(e) {
+                console.error('[GoogleSignIn] Failed to get OAuth access token:', e);
+                throw new Error('Gagal mendapatkan OAuth access token dari Google. Pastikan popup tidak diblokir dan coba lagi.');
+            }
         }
+        
+        if (!accessToken) {
+            throw new Error('OAuth access token kosong. Coba logout Google terlebih dahulu, lalu coba lagi.');
+        }
+        
+        googleDriveAccessToken = accessToken;
         
         if (!accessToken) {
             throw new Error('Gagal mendapatkan akses token dari Google. Coba lagi.');
