@@ -1,29 +1,21 @@
 {
   "name": "Smart Absen Enterprise",
   "short_name": "SmartAbsen",
-  "description": "Sistem Absensi Sekolah Modern - PWA, Offline Ready, Auto WhatsApp",
+  "description": "Sistem Absensi Sekolah PWA Profesional dengan RFID dan Barcode",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f4c75",
-  "orientation": "portrait-primary",
-  "scope": "./",
+  "background_color": "#0f766e",
+  "theme_color": "#0d9488",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f4c75'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>📋</text></svg>",
+      "src": "https://ui-avatars.com/api/?name=SA&background=0d9488&color=fff&size=192&bold=true",
       "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f4c75'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>📋</text></svg>",
+      "src": "https://ui-avatars.com/api/?name=SA&background=0d9488&color=fff&size=512&bold=true",
       "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
-  ],
-  "categories": ["education", "productivity"],
-  "lang": "id",
-  "dir": "ltr",
-  "prefer_related_applications": false
+  ]
 }
