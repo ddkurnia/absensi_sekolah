@@ -1,1137 +1,2032 @@
-// ====================================================
-// SMART ABSEN ENTERPRISE - MASTER ADMIN v4.0
-// Developer Panel - Firebase Management & School Approval
-// ====================================================
+/**
+ * ============================================================
+ *  SMART ABSEN ENTERPRISE v2.0 — MASTER ADMIN SERVICE
+ * ============================================================
+ *  Panel admin master untuk mengelola semua sekolah terdaftar.
+ *  Hanya email yang terdaftar sebagai masterAdminEmail yang
+ *  dapat mengakses panel ini.
+ * ============================================================
+ */
 
-// ===== 1. CONSTANTS =====
-const DEFAULT_SUPER_ADMIN_KEY = 'smartabsen2026';
-const APP_VERSION = '4.0';
+// ==========================================
+// MASTER ADMIN SERVICE
+// ==========================================
 
-// ===== 2. STATE =====
-let db = null;
-let firebaseAppInstance = null;
-let firebaseReady = false;
-let activityLog = [];
-let currentFilter = 'all';
-let allRegistrations = [];
-let allSchools = [];
-let appConfigData = null;
+class MasterAdminService {
+  constructor() {
+    this.db = null;
+    this.currentUser = null;
+    this.schools = [];
+    this.filteredSchools = [];
+    this.stats = {
+      totalSchools: 0,
+      activeSchools: 0,
+      inactiveSchools: 0,
+      totalStudents: 0,
+      totalTeachers: 0,
+      totalClasses: 0,
+      totalAttendance: 0,
+      averageAttendance: 0,
+    };
+    this.activityLog = [];
+    this.isInitialized = false;
+    this.currentFilter = 'all';
+    this.currentSort = { field: 'schoolName', direction: 'asc' };
+    this.searchQuery = '';
+  }
 
-// ===== 3. INITIALIZATION =====
+  // ────────────────────────────────
+  // INITIALIZATION
+  // ────────────────────────────────
+
+  async init() {
+    try {
+      this.showLoading('Memulai sistem...');
+
+      // 1. Validate config
+      if (typeof isConfigReady === 'function' && !isConfigReady()) {
+        const errors = typeof validateConfig === 'function' ? validateConfig() : [];
+        throw new Error('Konfigurasi belum lengkap:\n' + errors.join('\n'));
+      }
+
+      // 2. Initialize Firebase
+      if (typeof initFirebase === 'function') {
+        await initFirebase();
+      }
+      this.db = firebase.firestore();
+
+      // 3. Check authentication state
+      const authUser = await this.checkAuth();
+      if (!authUser) {
+        this.hideLoading();
+        this.showLoginPage();
+        return;
+      }
+
+      // 4. Check master admin access
+      const masterEmail = SMART_ABSEN_CONFIG.app.masterAdminEmail;
+      if (authUser.email.toLowerCase() !== masterEmail.toLowerCase()) {
+        this.hideLoading();
+        showAccessDenied(authUser.email, masterEmail);
+        return;
+      }
+
+      // Store current user
+      this.currentUser = {
+        uid: authUser.uid,
+        email: authUser.email,
+        name: authUser.displayName || authUser.email,
+        photoURL: authUser.photoURL || null,
+      };
+      localStorage.setItem('smart_absen_admin_user', JSON.stringify(this.currentUser));
+
+      // 5. Initialize Google API
+      if (typeof initGoogleAPI === 'function') {
+        try {
+          await initGoogleAPI();
+        } catch (e) {
+          console.warn('Google API init skipped:', e.message);
+        }
+      }
+
+      // 6. Load schools
+      await this.loadSchools();
+
+      // 7. Calculate global stats
+      await this.calculateGlobalStats();
+
+      // 8. Show dashboard
+      this.isInitialized = true;
+      this.hideLoading();
+      this.showAdminPanel();
+
+    } catch (error) {
+      console.error('Init error:', error);
+      this.hideLoading();
+      showToast('Gagal memuat: ' + error.message, 'error');
+    }
+  }
+
+  // ────────────────────────────────
+  // AUTHENTICATION
+  // ────────────────────────────────
+
+  async checkAuth() {
+    return new Promise((resolve, reject) => {
+      const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
+        unsubscribe();
+        resolve(user);
+      });
+    });
+  }
+
+  async signInWithGoogle() {
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('profile');
+      provider.addScope('email');
+      const result = await firebase.auth().signInWithPopup(provider);
+      return result.user;
+    } catch (error) {
+      if (error.code === 'auth/popup-closed-by-user') {
+        showToast('Login dibatalkan', 'warning');
+      } else {
+        showToast('Gagal login: ' + error.message, 'error');
+      }
+      return null;
+    }
+  }
+
+  async signOut() {
+    try {
+      await firebase.auth().signOut();
+      localStorage.removeItem('smart_absen_admin_user');
+      this.currentUser = null;
+      this.schools = [];
+      this.isInitialized = false;
+      this.showLoginPage();
+      showToast('Berhasil keluar dari sistem');
+    } catch (error) {
+      showToast('Gagal logout: ' + error.message, 'error');
+    }
+  }
+
+  // ────────────────────────────────
+  // SCHOOL MANAGEMENT
+  // ────────────────────────────────
+
+  async loadSchools() {
+    try {
+      this.showLoading('Memuat data sekolah...');
+      const snapshot = await this.db.collection('schools').orderBy('schoolName', 'asc').get();
+      this.schools = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        this.schools.push({
+          id: doc.id,
+          schoolId: data.schoolId || doc.id,
+          schoolName: data.schoolName || 'Tanpa Nama',
+          schoolAddress: data.schoolAddress || '-',
+          email: data.email || '-',
+          sheetId: data.sheetId || '',
+          folderId: data.folderId || '',
+          spreadsheetUrl: data.spreadsheetUrl || '',
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+          isActive: data.isActive !== false,
+          settings: data.settings || {},
+        });
+      });
+      this.applyFiltersAndSort();
+      this.hideLoading();
+      return this.schools;
+    } catch (error) {
+      this.hideLoading();
+      console.error('Load schools error:', error);
+      showToast('Gagal memuat data sekolah', 'error');
+      return [];
+    }
+  }
+
+  async getSchool(schoolId) {
+    try {
+      const doc = await this.db.collection('schools').doc(schoolId).get();
+      if (!doc.exists) throw new Error('Sekolah tidak ditemukan');
+      const data = doc.data();
+      return {
+        id: doc.id,
+        schoolId: data.schoolId || doc.id,
+        schoolName: data.schoolName || 'Tanpa Nama',
+        schoolAddress: data.schoolAddress || '-',
+        email: data.email || '-',
+        sheetId: data.sheetId || '',
+        folderId: data.folderId || '',
+        spreadsheetUrl: data.spreadsheetUrl || '',
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        isActive: data.isActive !== false,
+        settings: data.settings || {},
+      };
+    } catch (error) {
+      console.error('Get school error:', error);
+      throw error;
+    }
+  }
+
+  async updateSchool(schoolId, data) {
+    try {
+      data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      await this.db.collection('schools').doc(schoolId).update(data);
+      // Update local data
+      const idx = this.schools.findIndex((s) => s.id === schoolId);
+      if (idx >= 0) {
+        this.schools[idx] = { ...this.schools[idx], ...data };
+      }
+      this.addActivityLog('update', `Memperbarui data sekolah: ${this.schools[idx]?.schoolName || schoolId}`);
+      showToast('Data sekolah berhasil diperbarui');
+      return true;
+    } catch (error) {
+      console.error('Update school error:', error);
+      showToast('Gagal memperbarui: ' + error.message, 'error');
+      return false;
+    }
+  }
+
+  async toggleSchoolStatus(schoolId) {
+    try {
+      const school = this.schools.find((s) => s.id === schoolId);
+      if (!school) return;
+      const newStatus = !school.isActive;
+      const confirmMsg = newStatus
+        ? `Aktifkan sekolah "${school.schoolName}"?\nSekolah akan dapat mengakses sistem kembali.`
+        : `Nonaktifkan sekolah "${school.schoolName}"?\nSekolah tidak akan dapat mengakses sistem.`;
+
+      if (!confirm(confirmMsg)) return;
+
+      await this.db.collection('schools').doc(schoolId).update({
+        isActive: newStatus,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      school.isActive = newStatus;
+      this.addActivityLog(newStatus ? 'activate' : 'deactivate', `${newStatus ? 'Mengaktifkan' : 'Menonaktifkan'} sekolah: ${school.schoolName}`);
+      showToast(`Sekolah ${newStatus ? 'diaktifkan' : 'dinonaktifkan'}`);
+      this.applyFiltersAndSort();
+      return true;
+    } catch (error) {
+      showToast('Gagal mengubah status: ' + error.message, 'error');
+      return false;
+    }
+  }
+
+  async deleteSchool(schoolId) {
+    try {
+      const school = this.schools.find((s) => s.id === schoolId);
+      if (!school) return;
+
+      showModal('Konfirmasi Hapus', `
+        <div class="text-center">
+          <div class="text-5xl mb-4">⚠️</div>
+          <p class="text-lg font-semibold text-red-600 mb-2">Hapus Sekolah?</p>
+          <p class="text-slate-600 mb-1"><strong>${school.schoolName}</strong></p>
+          <p class="text-slate-500 text-sm mb-4">Email: ${school.email}</p>
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700 mb-4">
+            <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+            Tindakan ini akan menonaktifkan sekolah dari sistem. Data absensi tidak akan dihapus.
+          </div>
+          <div class="flex gap-3 justify-center">
+            <button onclick="closeMasterModal()" class="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 rounded-lg font-semibold text-sm transition">Batal</button>
+            <button onclick="masterAdmin.confirmDeleteSchool('${schoolId}')" class="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold text-sm transition">Ya, Hapus</button>
+          </div>
+        </div>
+      `);
+    } catch (error) {
+      showToast('Gagal menghapus: ' + error.message, 'error');
+    }
+  }
+
+  async confirmDeleteSchool(schoolId) {
+    try {
+      closeMasterModal();
+      const school = this.schools.find((s) => s.id === schoolId);
+      await this.db.collection('schools').doc(schoolId).update({
+        isActive: false,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      if (school) {
+        school.isActive = false;
+        this.addActivityLog('delete', `Menonaktifkan sekolah: ${school.schoolName}`);
+      }
+      showToast('Sekolah berhasil dinonaktifkan');
+      this.applyFiltersAndSort();
+      await this.calculateGlobalStats();
+      this.refreshUI();
+    } catch (error) {
+      showToast('Gagal menghapus: ' + error.message, 'error');
+    }
+  }
+
+  // ────────────────────────────────
+  // SCHOOL STATISTICS
+  // ────────────────────────────────
+
+  async calculateGlobalStats() {
+    this.stats = {
+      totalSchools: this.schools.length,
+      activeSchools: 0,
+      inactiveSchools: 0,
+      totalStudents: 0,
+      totalTeachers: 0,
+      totalClasses: 0,
+      totalAttendance: 0,
+      averageAttendance: 0,
+    };
+
+    this.schools.forEach((school) => {
+      if (school.isActive) {
+        this.stats.activeSchools++;
+      } else {
+        this.stats.inactiveSchools++;
+      }
+      const settings = school.settings || {};
+      this.stats.totalStudents += settings.total_siswa || 0;
+      this.stats.totalTeachers += settings.total_guru || 0;
+      this.stats.totalClasses += settings.total_kelas || 0;
+    });
+
+    this.stats.averageAttendance = this.stats.totalSchools > 0
+      ? Math.round((this.stats.activeSchools / this.stats.totalSchools) * 100)
+      : 0;
+
+    return this.stats;
+  }
+
+  async getSchoolStats(schoolId) {
+    try {
+      const school = await this.getSchool(schoolId);
+      if (!school || !school.sheetId) {
+        return {
+          totalSiswa: school?.settings?.total_siswa || 0,
+          totalGuru: school?.settings?.total_guru || 0,
+          totalKelas: school?.settings?.total_kelas || 0,
+          todayAttendance: null,
+        };
+      }
+
+      // Try to read from Google Sheets API
+      if (typeof gapi !== 'undefined' && gapi.client && gapi.client.sheets) {
+        try {
+          const sheetsConfig = SMART_ABSEN_CONFIG.sheets.structure;
+          let totalSiswa = 0, totalGuru = 0, totalKelas = 0;
+
+          // Read Siswa sheet
+          const siswaRes = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: school.sheetId,
+            range: 'Siswa!A2:A',
+          });
+          totalSiswa = (siswaRes.result.values || []).length;
+
+          // Read Guru sheet
+          const guruRes = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: school.sheetId,
+            range: 'Guru!A2:A',
+          });
+          totalGuru = (guruRes.result.values || []).length;
+
+          // Read Kelas sheet
+          const kelasRes = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: school.sheetId,
+            range: 'Kelas!A2:A',
+          });
+          totalKelas = (kelasRes.result.values || []).length;
+
+          // Read today's attendance
+          const today = new Date().toISOString().split('T')[0];
+          let todayAttendance = null;
+          try {
+            const absenRes = await gapi.client.sheets.spreadsheets.values.get({
+              spreadsheetId: school.sheetId,
+              range: 'Absensi!A2:A',
+            });
+            todayAttendance = (absenRes.result.values || []).length;
+          } catch (e) {
+            todayAttendance = null;
+          }
+
+          // Update school settings in Firestore
+          await this.db.collection('schools').doc(schoolId).update({
+            'settings.total_siswa': totalSiswa,
+            'settings.total_guru': totalGuru,
+            'settings.total_kelas': totalKelas,
+          });
+
+          return { totalSiswa, totalGuru, totalKelas, todayAttendance };
+        } catch (e) {
+          console.warn('Sheet read error for', schoolId, e);
+        }
+      }
+
+      return {
+        totalSiswa: school.settings.total_siswa || 0,
+        totalGuru: school.settings.total_guru || 0,
+        totalKelas: school.settings.total_kelas || 0,
+        todayAttendance: null,
+      };
+    } catch (error) {
+      console.error('Get school stats error:', error);
+      return { totalSiswa: 0, totalGuru: 0, totalKelas: 0, todayAttendance: null };
+    }
+  }
+
+  async getSchoolAttendanceHistory(schoolId, days = 7) {
+    try {
+      const school = await this.getSchool(schoolId);
+      if (!school || !school.sheetId) return [];
+
+      if (typeof gapi === 'undefined' || !gapi.client || !gapi.client.sheets) {
+        return [];
+      }
+
+      try {
+        const absenRes = await gapi.client.sheets.spreadsheets.values.get({
+          spreadsheetId: school.sheetId,
+          range: 'Absensi!A1:J',
+        });
+        const rows = absenRes.result.values || [];
+        if (rows.length <= 1) return [];
+
+        // Find column indexes from header
+        const header = rows[0];
+        const dateIdx = header.indexOf('Tanggal');
+        const statusIdx = header.indexOf('Status');
+        if (dateIdx === -1 || statusIdx === -1) return [];
+
+        const history = [];
+        const dateMap = {};
+        const today = new Date();
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const date = row[dateIdx];
+          if (!date) continue;
+
+          if (!dateMap[date]) {
+            dateMap[date] = { date, hadir: 0, sakit: 0, izin: 0, alpha: 0, terlambat: 0 };
+          }
+          const status = (row[statusIdx] || '').toString().toUpperCase().charAt(0);
+          if (status === 'H') dateMap[date].hadir++;
+          else if (status === 'S') dateMap[date].sakit++;
+          else if (status === 'I') dateMap[date].izin++;
+          else if (status === 'A') dateMap[date].alpha++;
+          else if (status === 'T') dateMap[date].terlambat++;
+          else dateMap[date].hadir++; // Default to hadir
+        }
+
+        // Sort by date descending and take last N days
+        const sortedDates = Object.values(dateMap).sort((a, b) => b.date.localeCompare(a.date));
+        return sortedDates.slice(0, days);
+      } catch (e) {
+        console.warn('Attendance history error:', e);
+        return [];
+      }
+    } catch (error) {
+      console.error('Attendance history error:', error);
+      return [];
+    }
+  }
+
+  // ────────────────────────────────
+  // SCHOOL ACTIONS
+  // ────────────────────────────────
+
+  async openSchoolSheet(schoolId) {
+    try {
+      const school = await this.getSchool(schoolId);
+      if (school.spreadsheetUrl) {
+        window.open(school.spreadsheetUrl, '_blank');
+      } else if (school.sheetId) {
+        window.open(`https://docs.google.com/spreadsheets/d/${school.sheetId}/edit`, '_blank');
+      } else {
+        showToast('Sekolah belum memiliki spreadsheet', 'warning');
+      }
+    } catch (error) {
+      showToast('Gagal membuka spreadsheet: ' + error.message, 'error');
+    }
+  }
+
+  async viewSchoolData(schoolId) {
+    try {
+      const school = await this.getSchool(schoolId);
+
+      showModal('Data Sekolah: ' + school.schoolName, `
+        <div class="space-y-4">
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-slate-500 text-xs mb-1">Email Admin</div>
+              <div class="font-semibold">${school.email}</div>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-slate-500 text-xs mb-1">Status</div>
+              <div class="font-semibold">${school.isActive ? '<span class="text-green-600">● Aktif</span>' : '<span class="text-red-500">● Nonaktif</span>'}</div>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-slate-500 text-xs mb-1">Total Siswa</div>
+              <div class="font-semibold text-lg">${school.settings.total_siswa || 0}</div>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-slate-500 text-xs mb-1">Total Guru</div>
+              <div class="font-semibold text-lg">${school.settings.total_guru || 0}</div>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-slate-500 text-xs mb-1">Total Kelas</div>
+              <div class="font-semibold text-lg">${school.settings.total_kelas || 0}</div>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-slate-500 text-xs mb-1">Tahun Ajaran</div>
+              <div class="font-semibold">${school.settings.tahun_ajaran || '-'}</div>
+            </div>
+          </div>
+          <div class="bg-blue-50 rounded-lg p-3">
+            <div class="text-slate-500 text-xs mb-1">Alamat</div>
+            <div class="font-semibold">${school.schoolAddress || '-'}</div>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-3">
+            <div class="text-slate-500 text-xs mb-1">Terdaftar Sejak</div>
+            <div class="font-semibold">${school.createdAt ? formatDate(school.createdAt.toDate ? school.createdAt.toDate() : school.createdAt) : '-'}</div>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-3">
+            <div class="text-slate-500 text-xs mb-1">Terakhir Diperbarui</div>
+            <div class="font-semibold">${school.updatedAt ? formatDate(school.updatedAt.toDate ? school.updatedAt.toDate() : school.updatedAt) : '-'}</div>
+          </div>
+          <div id="schoolAttendanceChart-${schoolId}" class="mt-4"></div>
+          <div class="flex gap-3 justify-end mt-4">
+            <button onclick="closeMasterModal()" class="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 rounded-lg font-semibold text-sm transition">Tutup</button>
+            ${school.spreadsheetUrl ? `<a href="${school.spreadsheetUrl}" target="_blank" class="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold text-sm transition inline-flex items-center gap-2"><i class="fa-solid fa-table"></i> Buka Spreadsheet</a>` : ''}
+          </div>
+        </div>
+      `);
+
+      // Load attendance chart for this school
+      const history = await this.getSchoolAttendanceHistory(schoolId, 7);
+      if (history.length > 0) {
+        const chartEl = document.getElementById('schoolAttendanceChart-' + schoolId);
+        if (chartEl) {
+          chartEl.innerHTML = renderAttendanceChart(history);
+        }
+      }
+    } catch (error) {
+      showToast('Gagal memuat data: ' + error.message, 'error');
+    }
+  }
+
+  async resetSchoolData(schoolId) {
+    try {
+      const school = await this.getSchool(schoolId);
+      if (!school) return;
+
+      showModal('⚠️ Reset Data Sekolah', `
+        <div class="space-y-4">
+          <div class="text-center">
+            <div class="text-5xl mb-4">🚨</div>
+            <p class="text-lg font-semibold text-red-600">Peringatan: Tindakan Berbahaya!</p>
+          </div>
+          <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+            <p class="font-semibold mb-2">Anda akan menghapus SEMUA data di sekolah:</p>
+            <p class="font-bold">${school.schoolName}</p>
+            <ul class="mt-2 list-disc list-inside space-y-1">
+              <li>Semua data siswa akan dihapus</li>
+              <li>Semua data guru akan dihapus</li>
+              <li>Semua data kelas akan dihapus</li>
+              <li>Semua data absensi akan dihapus</li>
+              <li>Pengaturan akan dikembalikan ke default</li>
+            </ul>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
+            <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+            Tindakan ini <strong>TIDAK DAPAT dibatalkan</strong>.
+          </div>
+          <div class="flex gap-3 justify-center">
+            <button onclick="closeMasterModal()" class="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 rounded-lg font-semibold text-sm transition">Batal</button>
+            <button onclick="closeMasterModal(); masterAdmin.executeReset('${schoolId}')" class="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold text-sm transition">
+              <i class="fa-solid fa-trash mr-1"></i> Ya, Hapus Semua Data
+            </button>
+          </div>
+        </div>
+      `);
+    } catch (error) {
+      showToast('Gagal: ' + error.message, 'error');
+    }
+  }
+
+  async executeReset(schoolId) {
+    try {
+      if (!confirm('PERHATIAN!\n\nAnda yakin ingin menghapus semua data sekolah ini?\nTindakan ini TIDAK DAPAT dibatalkan!')) return;
+      if (!confirm('Konfirmasi sekali lagi: HAPUS SEMUA DATA?')) return;
+
+      const school = await this.getSchool(schoolId);
+      if (!school || !school.sheetId) {
+        showToast('School tidak memiliki spreadsheet', 'error');
+        return;
+      }
+
+      if (typeof gapi !== 'undefined' && gapi.client && gapi.client.sheets) {
+        const spreadsheetId = school.sheetId;
+        const sheetsConfig = SMART_ABSEN_CONFIG.sheets.structure;
+
+        // Clear each sheet except Pengaturan
+        for (const sheetName of Object.keys(sheetsConfig)) {
+          if (sheetName === 'Pengaturan') continue;
+          try {
+            await gapi.client.sheets.spreadsheets.values.clear({
+              spreadsheetId: spreadsheetId,
+              range: sheetName + '!A2:ZZ',
+            });
+          } catch (e) {
+            console.warn('Failed to clear sheet:', sheetName, e);
+          }
+        }
+
+        // Reset Pengaturan
+        try {
+          await gapi.client.sheets.spreadsheets.values.clear({
+            spreadsheetId: spreadsheetId,
+            range: 'Pengaturan!A2:ZZ',
+          });
+          const defaultSettings = [
+            ['tahun_ajaran', '2025/2026', 'Tahun ajaran aktif'],
+            ['whatsapp_enabled', 'false', 'Status WhatsApp notifikasi'],
+            ['school_start', '07:00', 'Jam mulai sekolah'],
+            ['school_end', '15:00', 'Jam selesai sekolah'],
+          ];
+          await gapi.client.sheets.spreadsheets.values.update({
+            spreadsheetId: spreadsheetId,
+            range: 'Pengaturan!A2',
+            valueInputOption: 'USER_ENTERED',
+            resource: { values: defaultSettings },
+          });
+        } catch (e) {
+          console.warn('Failed to reset Pengaturan:', e);
+        }
+
+        // Update Firestore
+        await this.db.collection('schools').doc(schoolId).update({
+          'settings.total_siswa': 0,
+          'settings.total_guru': 0,
+          'settings.total_kelas': 0,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+
+        this.addActivityLog('reset', `Reset semua data sekolah: ${school.schoolName}`);
+        showToast('Data sekolah berhasil direset');
+        await this.loadSchools();
+        await this.calculateGlobalStats();
+        this.refreshUI();
+      } else {
+        showToast('Google Sheets API tidak tersedia', 'error');
+      }
+    } catch (error) {
+      showToast('Gagal reset data: ' + error.message, 'error');
+    }
+  }
+
+  // ────────────────────────────────
+  // SEARCH & FILTER
+  // ────────────────────────────────
+
+  searchSchools(query) {
+    this.searchQuery = query.toLowerCase().trim();
+    this.applyFiltersAndSort();
+    return this.filteredSchools;
+  }
+
+  filterSchools(status) {
+    this.currentFilter = status;
+    this.applyFiltersAndSort();
+    return this.filteredSchools;
+  }
+
+  sortSchools(field, direction) {
+    this.currentSort = { field, direction: direction || 'asc' };
+    this.applyFiltersAndSort();
+    return this.filteredSchools;
+  }
+
+  applyFiltersAndSort() {
+    let result = [...this.schools];
+
+    // Apply search
+    if (this.searchQuery) {
+      result = result.filter(
+        (s) =>
+          s.schoolName.toLowerCase().includes(this.searchQuery) ||
+          s.email.toLowerCase().includes(this.searchQuery) ||
+          s.schoolAddress.toLowerCase().includes(this.searchQuery)
+      );
+    }
+
+    // Apply filter
+    if (this.currentFilter === 'active') {
+      result = result.filter((s) => s.isActive);
+    } else if (this.currentFilter === 'inactive') {
+      result = result.filter((s) => !s.isActive);
+    }
+
+    // Apply sort
+    result.sort((a, b) => {
+      let valA, valB;
+      switch (this.currentSort.field) {
+        case 'schoolName':
+          valA = a.schoolName.toLowerCase();
+          valB = b.schoolName.toLowerCase();
+          break;
+        case 'email':
+          valA = a.email.toLowerCase();
+          valB = b.email.toLowerCase();
+          break;
+        case 'totalStudents':
+          valA = a.settings.total_siswa || 0;
+          valB = b.settings.total_siswa || 0;
+          break;
+        case 'createdAt':
+          valA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
+          valB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
+          break;
+        default:
+          valA = a.schoolName.toLowerCase();
+          valB = b.schoolName.toLowerCase();
+      }
+      if (valA < valB) return this.currentSort.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return this.currentSort.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    this.filteredSchools = result;
+  }
+
+  // ────────────────────────────────
+  // REGISTRATION
+  // ────────────────────────────────
+
+  async addManualSchool(schoolData) {
+    try {
+      const { schoolName, email, address } = schoolData;
+      if (!schoolName || !email) {
+        showToast('Nama sekolah dan email wajib diisi', 'error');
+        return false;
+      }
+
+      // Check for duplicate email
+      const existing = this.schools.find((s) => s.email.toLowerCase() === email.toLowerCase());
+      if (existing) {
+        showToast('Email sudah terdaftar untuk sekolah lain', 'error');
+        return false;
+      }
+
+      const schoolId = generateId ? generateId() : Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+
+      const schoolDoc = {
+        schoolId: schoolId,
+        schoolName: schoolName,
+        schoolAddress: address || '',
+        email: email,
+        sheetId: '',
+        folderId: '',
+        spreadsheetUrl: '',
+        isActive: true,
+        settings: {
+          tahun_ajaran: SMART_ABSEN_CONFIG.app.schoolHours ? '2025/2026' : '2025/2026',
+          whatsapp_enabled: false,
+          school_hours: { start: '07:00', end: '15:00' },
+          total_siswa: 0,
+          total_guru: 0,
+          total_kelas: 0,
+        },
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+
+      await this.db.collection('schools').doc(schoolId).set(schoolDoc);
+
+      this.schools.push({
+        id: schoolId,
+        ...schoolDoc,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      this.applyFiltersAndSort();
+      await this.calculateGlobalStats();
+      this.addActivityLog('add', `Menambahkan sekolah baru: ${schoolName}`);
+      showToast('Sekolah berhasil ditambahkan');
+      this.refreshUI();
+      return true;
+    } catch (error) {
+      showToast('Gagal menambahkan sekolah: ' + error.message, 'error');
+      return false;
+    }
+  }
+
+  async sendSchoolInvitation(email, schoolName) {
+    try {
+      const baseUrl = window.location.origin + window.location.pathname.replace('master-admin.html', '');
+      const invitationLink = `${baseUrl}?ref=${encodeURIComponent(email)}&school=${encodeURIComponent(schoolName)}`;
+
+      // Store invitation in Firestore
+      const invitationId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+      await this.db.collection('invitations').doc(invitationId).set({
+        email: email,
+        schoolName: schoolName,
+        link: invitationLink,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        status: 'sent',
+        sentBy: this.currentUser.email,
+      });
+
+      this.addActivityLog('invite', `Mengirim undangan ke ${email} (${schoolName})`);
+
+      // Show the invitation link
+      showModal('Undangan Terkirim', `
+        <div class="space-y-4">
+          <div class="text-center">
+            <div class="text-5xl mb-3">📧</div>
+            <p class="text-lg font-semibold text-green-600">Undangan berhasil dibuat!</p>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-4">
+            <div class="text-sm text-slate-500 mb-2">Kirim link berikut ke <strong>${email}</strong>:</div>
+            <div class="bg-white border rounded-lg p-3 text-sm font-mono break-all text-blue-600 select-all">${invitationLink}</div>
+          </div>
+          <div class="flex gap-3 justify-center">
+            <button onclick="navigator.clipboard.writeText('${invitationLink}').then(()=>showToast('Link disalin!'));closeMasterModal()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-sm transition">
+              <i class="fa-solid fa-copy mr-1"></i> Salin Link
+            </button>
+            <button onclick="closeMasterModal()" class="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 rounded-lg font-semibold text-sm transition">Tutup</button>
+          </div>
+        </div>
+      `);
+
+      // WhatsApp share option
+      const waMessage = `Halo, Anda diundang untuk mendaftarkan sekolah "${schoolName}" di Smart Absen Enterprise.\n\nLink pendaftaran:\n${invitationLink}`;
+      const waUrl = `https://wa.me/?text=${encodeURIComponent(waMessage)}`;
+
+      showModal('Undangan Terkirim', `
+        <div class="space-y-4">
+          <div class="text-center">
+            <div class="text-5xl mb-3">📧</div>
+            <p class="text-lg font-semibold text-green-600">Undangan berhasil dibuat!</p>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-4">
+            <div class="text-sm text-slate-500 mb-2">Kirim link berikut ke <strong>${email}</strong>:</div>
+            <div class="bg-white border rounded-lg p-3 text-sm font-mono break-all text-blue-600 select-all">${invitationLink}</div>
+          </div>
+          <div class="flex gap-3 justify-center flex-wrap">
+            <button onclick="navigator.clipboard.writeText('${invitationLink}').then(()=>showToast('Link disalin!'))" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-sm transition">
+              <i class="fa-solid fa-copy mr-1"></i> Salin Link
+            </button>
+            <a href="${waUrl}" target="_blank" class="px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold text-sm transition inline-flex items-center gap-1">
+              <i class="fa-brands fa-whatsapp"></i> Kirim via WhatsApp
+            </a>
+            <a href="mailto:${email}?subject=Undangan Smart Absen Enterprise&body=${encodeURIComponent(waMessage)}" class="px-4 py-2.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-semibold text-sm transition inline-flex items-center gap-1">
+              <i class="fa-solid fa-envelope"></i> Kirim Email
+            </a>
+          </div>
+          <div class="flex justify-center">
+            <button onclick="closeMasterModal()" class="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 rounded-lg font-semibold text-sm transition">Tutup</button>
+          </div>
+        </div>
+      `);
+    } catch (error) {
+      showToast('Gagal mengirim undangan: ' + error.message, 'error');
+    }
+  }
+
+  // ────────────────────────────────
+  // ACTIVITY LOG
+  // ────────────────────────────────
+
+  addActivityLog(action, description) {
+    this.activityLog.unshift({
+      id: Date.now().toString(36),
+      action: action,
+      description: description,
+      timestamp: new Date(),
+      user: this.currentUser ? this.currentUser.email : 'System',
+    });
+    // Keep only last 50 entries
+    if (this.activityLog.length > 50) {
+      this.activityLog = this.activityLog.slice(0, 50);
+    }
+    // Save to localStorage
+    try {
+      localStorage.setItem('master_admin_activity_log', JSON.stringify(this.activityLog));
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  loadActivityLog() {
+    try {
+      const saved = localStorage.getItem('master_admin_activity_log');
+      if (saved) {
+        this.activityLog = JSON.parse(saved);
+      }
+    } catch (e) {
+      this.activityLog = [];
+    }
+  }
+
+  // ────────────────────────────────
+  // UI HELPERS
+  // ────────────────────────────────
+
+  showLoading(message) {
+    const el = document.getElementById('globalLoading');
+    if (el) {
+      const msgEl = el.querySelector('.loading-message');
+      if (msgEl) msgEl.textContent = message || 'Memuat...';
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+    }
+  }
+
+  hideLoading() {
+    const el = document.getElementById('globalLoading');
+    if (el) {
+      el.classList.add('hidden');
+      el.classList.remove('flex');
+    }
+  }
+
+  showLoginPage() {
+    const loginPage = document.getElementById('loginPage');
+    const adminPanel = document.getElementById('adminPanel');
+    if (loginPage) loginPage.classList.remove('hidden');
+    if (adminPanel) adminPanel.classList.add('hidden');
+  }
+
+  showAdminPanel() {
+    const loginPage = document.getElementById('loginPage');
+    const adminPanel = document.getElementById('adminPanel');
+    if (loginPage) loginPage.classList.add('hidden');
+    if (adminPanel) adminPanel.classList.remove('hidden');
+    this.refreshUI();
+  }
+
+  refreshUI() {
+    renderStatsCards(this.stats);
+    renderSchoolsTable(this.filteredSchools);
+    renderActivityFeed(this.activityLog.slice(0, 10));
+    updateHeaderInfo(this.currentUser);
+  }
+}
+
+// ==========================================
+// UTILITY FUNCTIONS
+// ==========================================
+
+/**
+ * Show access denied message
+ */
+function showAccessDenied(userEmail, masterEmail) {
+  const loginPage = document.getElementById('loginPage');
+  const adminPanel = document.getElementById('adminPanel');
+
+  if (loginPage) {
+    loginPage.innerHTML = `
+      <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+          <div class="text-6xl mb-4">🛡️</div>
+          <h1 class="text-2xl font-bold text-slate-800 mb-2">Akses Ditolak</h1>
+          <p class="text-red-600 font-semibold mb-4">Anda tidak memiliki akses admin master</p>
+          <div class="bg-slate-50 rounded-xl p-4 mb-6 text-sm text-left">
+            <div class="flex items-center gap-2 mb-2">
+              <i class="fa-solid fa-user text-slate-400"></i>
+              <span class="text-slate-500">Email Anda:</span>
+              <span class="font-mono text-slate-700">${userEmail || '-'}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-key text-slate-400"></i>
+              <span class="text-slate-500">Email Master Admin:</span>
+              <span class="font-mono text-slate-700">${masterEmail || '-'}</span>
+            </div>
+          </div>
+          <p class="text-slate-500 text-sm mb-6">
+            Panel ini hanya dapat diakses oleh akun yang terdaftar sebagai Master Admin.
+            Jika Anda merasa ini adalah kesalahan, silakan hubungi administrator sistem.
+          </p>
+          <button onclick="masterAdmin.signOut()" class="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold transition">
+            <i class="fa-solid fa-arrow-left mr-2"></i>Kembali ke Login
+          </button>
+        </div>
+      </div>
+    `;
+  }
+  if (adminPanel) adminPanel.classList.add('hidden');
+}
+
+/**
+ * Generate schools table HTML
+ */
+function renderSchoolsTable(schools) {
+  const container = document.getElementById('schoolsTableBody');
+  if (!container) return;
+
+  if (!schools || schools.length === 0) {
+    container.innerHTML = `
+      <tr>
+        <td colspan="8" class="text-center py-12 text-slate-400">
+          <i class="fa-solid fa-school text-4xl mb-3 block"></i>
+          <p class="text-lg font-semibold">Tidak ada sekolah ditemukan</p>
+          <p class="text-sm mt-1">${masterAdmin && masterAdmin.searchQuery ? 'Coba ubah kata kunci pencarian' : 'Belum ada sekolah yang terdaftar'}</p>
+        </td>
+      </tr>
+    `;
+    const countEl = document.getElementById('schoolsCount');
+    if (countEl) countEl.textContent = '0 sekolah';
+    return;
+  }
+
+  const countEl = document.getElementById('schoolsCount');
+  if (countEl) countEl.textContent = schools.length + ' sekolah';
+
+  container.innerHTML = schools.map((school, index) => {
+    const settings = school.settings || {};
+    const createdDate = school.createdAt
+      ? formatDate(school.createdAt.toDate ? school.createdAt.toDate() : school.createdAt)
+      : '-';
+    const statusBadge = school.isActive
+      ? '<span class="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold"><span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>Aktif</span>'
+      : '<span class="inline-flex items-center gap-1 px-2.5 py-1 bg-red-50 text-red-600 rounded-full text-xs font-bold"><span class="w-1.5 h-1.5 bg-red-500 rounded-full"></span>Nonaktif</span>';
+    const sheetLink = school.spreadsheetUrl || (school.sheetId ? `https://docs.google.com/spreadsheets/d/${school.sheetId}` : '');
+
+    return `
+      <tr class="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+        <td class="px-4 py-3.5">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+              ${(index + 1).toString().padStart(2, '0')}
+            </div>
+            <div>
+              <div class="font-semibold text-slate-800 text-sm">${escapeHtml(school.schoolName)}</div>
+              <div class="text-xs text-slate-500">${escapeHtml(school.email)}</div>
+            </div>
+          </div>
+        </td>
+        <td class="px-4 py-3.5 text-sm text-slate-600 max-w-[200px] truncate">${escapeHtml(school.schoolAddress)}</td>
+        <td class="px-4 py-3.5">${statusBadge}</td>
+        <td class="px-4 py-3.5 text-center text-sm font-semibold text-slate-700">${settings.total_siswa || 0}</td>
+        <td class="px-4 py-3.5 text-center text-sm font-semibold text-slate-700">${settings.total_guru || 0}</td>
+        <td class="px-4 py-3.5 text-center text-sm font-semibold text-slate-700">${settings.total_kelas || 0}</td>
+        <td class="px-4 py-3.5 text-xs text-slate-500">${createdDate}</td>
+        <td class="px-4 py-3.5">
+          <div class="flex items-center gap-1">
+            <button onclick="masterAdmin.viewSchoolData('${school.id}')" class="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition" title="Lihat Detail">
+              <i class="fa-solid fa-eye text-sm"></i>
+            </button>
+            ${sheetLink ? `
+              <button onclick="masterAdmin.openSchoolSheet('${school.id}')" class="p-2 hover:bg-green-50 text-green-600 rounded-lg transition" title="Buka Spreadsheet">
+                <i class="fa-solid fa-table text-sm"></i>
+              </button>
+            ` : ''}
+            <button onclick="masterAdmin.toggleSchoolStatus('${school.id}')" class="p-2 hover:bg-amber-50 text-amber-600 rounded-lg transition" title="${school.isActive ? 'Nonaktifkan' : 'Aktifkan'}">
+              <i class="fa-solid fa-${school.isActive ? 'toggle-on text-green-500' : 'toggle-off'} text-sm"></i>
+            </button>
+            <button onclick="masterAdmin.deleteSchool('${school.id}')" class="p-2 hover:bg-red-50 text-red-500 rounded-lg transition" title="Hapus">
+              <i class="fa-solid fa-trash text-sm"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * Generate statistics cards HTML
+ */
+function renderStatsCards(stats) {
+  const cards = [
+    {
+      id: 'statSchools',
+      icon: 'fa-school',
+      label: 'Total Sekolah',
+      value: stats.totalSchools,
+      sub: `<span class="text-emerald-600">${stats.activeSchools} aktif</span> · <span class="text-red-500">${stats.inactiveSchools} nonaktif</span>`,
+      color: 'from-blue-500 to-blue-600',
+      bgColor: 'bg-blue-50',
+    },
+    {
+      id: 'statStudents',
+      icon: 'fa-user-graduate',
+      label: 'Total Siswa Terdaftar',
+      value: stats.totalStudents.toLocaleString('id-ID'),
+      sub: 'Dari semua sekolah aktif',
+      color: 'from-emerald-500 to-emerald-600',
+      bgColor: 'bg-emerald-50',
+    },
+    {
+      id: 'statTeachers',
+      icon: 'fa-chalkboard-user',
+      label: 'Total Guru',
+      value: stats.totalTeachers.toLocaleString('id-ID'),
+      sub: 'Dari semua sekolah aktif',
+      color: 'from-purple-500 to-purple-600',
+      bgColor: 'bg-purple-50',
+    },
+    {
+      id: 'statAttendance',
+      icon: 'fa-chart-line',
+      label: 'Sekolah Aktif',
+      value: stats.totalSchools > 0 ? stats.averageAttendance + '%' : '0%',
+      sub: `${stats.activeSchools} dari ${stats.totalSchools} sekolah`,
+      color: 'from-amber-500 to-amber-600',
+      bgColor: 'bg-amber-50',
+    },
+  ];
+
+  const container = document.getElementById('statsContainer');
+  if (!container) return;
+
+  container.innerHTML = cards.map((card) => `
+    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 hover:shadow-md transition-shadow">
+      <div class="flex items-start justify-between mb-3">
+        <div class="w-11 h-11 bg-gradient-to-br ${card.color} rounded-xl flex items-center justify-center shadow-lg">
+          <i class="fa-solid ${card.icon} text-white text-lg"></i>
+        </div>
+        <span class="text-xs font-medium text-slate-400 uppercase tracking-wide">${card.label}</span>
+      </div>
+      <div class="text-3xl font-bold text-slate-800 mb-1" id="${card.id}Value">${card.value}</div>
+      <div class="text-xs text-slate-500">${card.sub}</div>
+    </div>
+  `).join('');
+
+  // Also update stats page
+  const statsPageContainer = document.getElementById('statsPageContainer');
+  if (statsPageContainer) {
+    const extendedCards = [
+      ...cards,
+      {
+        icon: 'fa-building-columns',
+        label: 'Total Kelas',
+        value: stats.totalClasses.toLocaleString('id-ID'),
+        sub: 'Dari semua sekolah aktif',
+        color: 'from-cyan-500 to-cyan-600',
+      },
+      {
+        icon: 'fa-percent',
+        label: 'Rata-rata Siswa/Sekolah',
+        value: stats.activeSchools > 0 ? Math.round(stats.totalStudents / stats.activeSchools) : 0,
+        sub: 'Per sekolah aktif',
+        color: 'from-rose-500 to-rose-600',
+      },
+    ];
+
+    statsPageContainer.innerHTML = extendedCards.map((card) => `
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 hover:shadow-md transition-shadow">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-11 h-11 bg-gradient-to-br ${card.color} rounded-xl flex items-center justify-center shadow-lg">
+            <i class="fa-solid ${card.icon} text-white text-lg"></i>
+          </div>
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wide">${card.label}</span>
+        </div>
+        <div class="text-3xl font-bold text-slate-800 mb-1">${card.value}</div>
+        <div class="text-xs text-slate-500">${card.sub}</div>
+      </div>
+    `).join('');
+  }
+}
+
+/**
+ * Generate attendance chart HTML (CSS bar chart)
+ */
+function renderAttendanceChart(history) {
+  if (!history || history.length === 0) {
+    return '<p class="text-slate-400 text-sm text-center py-4">Belum ada data absensi</p>';
+  }
+
+  const maxTotal = Math.max(...history.map((h) => h.hadir + h.sakit + h.izin + h.alpha + h.terlambat), 1);
+
+  return `
+    <div class="mt-4">
+      <h4 class="text-sm font-semibold text-slate-700 mb-3">📊 Riwayat Kehadiran (7 Hari Terakhir)</h4>
+      <div class="space-y-2">
+        ${history.map((day) => {
+          const total = day.hadir + day.sakit + day.izin + day.alpha + day.terlambat;
+          const hadirPct = total > 0 ? Math.round((day.hadir / total) * 100) : 0;
+          const hadirWidth = maxTotal > 0 ? Math.round((day.hadir / maxTotal) * 100) : 0;
+          const sakitWidth = maxTotal > 0 ? Math.round((day.sakit / maxTotal) * 100) : 0;
+          const izinWidth = maxTotal > 0 ? Math.round((day.izin / maxTotal) * 100) : 0;
+          const alphaWidth = maxTotal > 0 ? Math.round((day.alpha / maxTotal) * 100) : 0;
+          const terlambatWidth = maxTotal > 0 ? Math.round((day.terlambat / maxTotal) * 100) : 0;
+
+          return `
+            <div class="flex items-center gap-2">
+              <div class="w-20 text-xs text-slate-500 flex-shrink-0 text-right font-mono">${day.date.slice(-5)}</div>
+              <div class="flex-1 flex h-5 rounded overflow-hidden bg-slate-100">
+                <div class="bg-emerald-400 transition-all" style="width: ${hadirWidth}%" title="Hadir: ${day.hadir}"></div>
+                <div class="bg-amber-400 transition-all" style="width: ${sakitWidth}%" title="Sakit: ${day.sakit}"></div>
+                <div class="bg-blue-400 transition-all" style="width: ${izinWidth}%" title="Izin: ${day.izin}"></div>
+                <div class="bg-red-400 transition-all" style="width: ${alphaWidth}%" title="Alpha: ${day.alpha}"></div>
+                <div class="bg-orange-400 transition-all" style="width: ${terlambatWidth}%" title="Terlambat: ${day.terlambat}"></div>
+              </div>
+              <div class="w-12 text-xs font-semibold text-slate-600 flex-shrink-0">${hadirPct}%</div>
+              <div class="w-10 text-xs text-slate-400 flex-shrink-0">(${total})</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div class="flex gap-4 mt-3 text-xs text-slate-500 justify-center">
+        <span><span class="inline-block w-3 h-3 bg-emerald-400 rounded mr-1"></span>Hadir</span>
+        <span><span class="inline-block w-3 h-3 bg-amber-400 rounded mr-1"></span>Sakit</span>
+        <span><span class="inline-block w-3 h-3 bg-blue-400 rounded mr-1"></span>Izin</span>
+        <span><span class="inline-block w-3 h-3 bg-red-400 rounded mr-1"></span>Alpha</span>
+        <span><span class="inline-block w-3 h-3 bg-orange-400 rounded mr-1"></span>Terlambat</span>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render activity feed
+ */
+function renderActivityFeed(activities) {
+  const container = document.getElementById('activityFeed');
+  if (!container) return;
+
+  if (!activities || activities.length === 0) {
+    container.innerHTML = '<p class="text-slate-400 text-sm text-center py-6">Belum ada aktivitas</p>';
+    return;
+  }
+
+  const actionIcons = {
+    add: { icon: 'fa-plus-circle', color: 'text-green-500', bg: 'bg-green-50' },
+    update: { icon: 'fa-pen', color: 'text-blue-500', bg: 'bg-blue-50' },
+    delete: { icon: 'fa-trash', color: 'text-red-500', bg: 'bg-red-50' },
+    activate: { icon: 'fa-toggle-on', color: 'text-emerald-500', bg: 'bg-emerald-50' },
+    deactivate: { icon: 'fa-toggle-off', color: 'text-slate-400', bg: 'bg-slate-50' },
+    reset: { icon: 'fa-rotate', color: 'text-amber-500', bg: 'bg-amber-50' },
+    invite: { icon: 'fa-envelope', color: 'text-purple-500', bg: 'bg-purple-50' },
+  };
+
+  container.innerHTML = activities.slice(0, 10).map((act) => {
+    const cfg = actionIcons[act.action] || { icon: 'fa-circle-info', color: 'text-slate-400', bg: 'bg-slate-50' };
+    const time = act.timestamp ? formatTime(new Date(act.timestamp)) : '';
+    const date = act.timestamp ? formatDate(new Date(act.timestamp)) : '';
+
+    return `
+      <div class="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
+        <div class="w-8 h-8 ${cfg.bg} rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+          <i class="fa-solid ${cfg.icon} ${cfg.color} text-xs"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm text-slate-700">${escapeHtml(act.description)}</p>
+          <p class="text-xs text-slate-400 mt-0.5">${date} ${time}</p>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Update header user info
+ */
+function updateHeaderInfo(user) {
+  if (!user) return;
+  const nameEl = document.getElementById('headerUserName');
+  const emailEl = document.getElementById('headerUserEmail');
+  const photoEl = document.getElementById('headerUserPhoto');
+  const avatarEl = document.getElementById('headerUserAvatar');
+
+  if (nameEl) nameEl.textContent = user.name || user.email;
+  if (emailEl) emailEl.textContent = user.email;
+  if (photoEl && user.photoURL) {
+    photoEl.src = user.photoURL;
+    photoEl.classList.remove('hidden');
+    if (avatarEl) avatarEl.classList.add('hidden');
+  } else if (avatarEl && user.name) {
+    avatarEl.textContent = user.name.charAt(0).toUpperCase();
+    if (photoEl) photoEl.classList.add('hidden');
+    avatarEl.classList.remove('hidden');
+  }
+}
+
+/**
+ * Export schools list to CSV
+ */
+function exportSchoolsList(schools) {
+  if (!schools || schools.length === 0) {
+    showToast('Tidak ada data untuk diekspor', 'warning');
+    return;
+  }
+
+  const headers = ['No', 'Nama Sekolah', 'Email', 'Alamat', 'Status', 'Total Siswa', 'Total Guru', 'Total Kelas', 'Tahun Ajaran', 'Tanggal Daftar'];
+  const rows = schools.map((school, i) => {
+    const s = school.settings || {};
+    const createdDate = school.createdAt
+      ? formatDate(school.createdAt.toDate ? school.createdAt.toDate() : school.createdAt)
+      : '-';
+    return [
+      i + 1,
+      '"' + (school.schoolName || '').replace(/"/g, '""') + '"',
+      school.email || '-',
+      '"' + (school.schoolAddress || '').replace(/"/g, '""') + '"',
+      school.isActive ? 'Aktif' : 'Nonaktif',
+      s.total_siswa || 0,
+      s.total_guru || 0,
+      s.total_kelas || 0,
+      s.tahun_ajaran || '-',
+      createdDate,
+    ].join(',');
+  });
+
+  const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `data_sekolah_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showToast('Data berhasil diekspor ke CSV');
+}
+
+/**
+ * Render recent registrations table (last 5 schools)
+ */
+function renderRecentRegistrations(schools) {
+  const container = document.getElementById('recentRegistrations');
+  if (!container) return;
+
+  // Sort by createdAt descending, take last 5
+  const sorted = [...schools]
+    .sort((a, b) => {
+      const dateA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
+      const dateB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
+      return dateB - dateA;
+    })
+    .slice(0, 5);
+
+  if (sorted.length === 0) {
+    container.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center py-8 text-slate-400">
+          <p class="text-sm">Belum ada sekolah terdaftar</p>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  container.innerHTML = sorted.map((school) => {
+    const createdDate = school.createdAt
+      ? formatDate(school.createdAt.toDate ? school.createdAt.toDate() : school.createdAt)
+      : '-';
+    const statusBadge = school.isActive
+      ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold"><span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>Aktif</span>'
+      : '<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-600 rounded-full text-xs font-bold"><span class="w-1.5 h-1.5 bg-red-500 rounded-full"></span>Nonaktif</span>';
+
+    return `
+      <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition">
+        <td class="px-4 py-3">
+          <div class="font-semibold text-sm text-slate-800">${escapeHtml(school.schoolName)}</div>
+          <div class="text-xs text-slate-500">${escapeHtml(school.email)}</div>
+        </td>
+        <td class="px-4 py-3">${statusBadge}</td>
+        <td class="px-4 py-3 text-xs text-slate-500">${createdDate}</td>
+        <td class="px-4 py-3">
+          <button onclick="masterAdmin.viewSchoolData('${school.id}')" class="text-blue-600 hover:text-blue-800 text-xs font-semibold transition">
+            <i class="fa-solid fa-eye mr-1"></i>Detail
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * Render schools distribution for statistics page
+ */
+function renderSchoolsDistribution(schools) {
+  const container = document.getElementById('schoolsDistribution');
+  if (!container) return;
+
+  if (!schools || schools.length === 0) {
+    container.innerHTML = '<p class="text-slate-400 text-sm text-center py-4">Belum ada data</p>';
+    return;
+  }
+
+  // By size
+  const sizeGroups = { 'Kecil (<100)': 0, 'Sedang (100-500)': 0, 'Besar (500-1000)': 0, 'Sangat Besar (>1000)': 0 };
+  schools.forEach((s) => {
+    const total = s.settings.total_siswa || 0;
+    if (total < 100) sizeGroups['Kecil (<100)']++;
+    else if (total < 500) sizeGroups['Sedang (100-500)']++;
+    else if (total < 1000) sizeGroups['Besar (500-1000)']++;
+    else sizeGroups['Sangat Besar (>1000)']++;
+  });
+
+  const maxCount = Math.max(...Object.values(sizeGroups), 1);
+
+  container.innerHTML = `
+    <div class="space-y-3">
+      <h5 class="text-sm font-semibold text-slate-700 mb-2">📊 Distribusi Berdasarkan Jumlah Siswa</h5>
+      ${Object.entries(sizeGroups).map(([label, count]) => `
+        <div class="flex items-center gap-3">
+          <div class="w-32 text-xs text-slate-600 flex-shrink-0">${label}</div>
+          <div class="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all flex items-center justify-end px-2"
+                 style="width: ${Math.max(Math.round((count / maxCount) * 100), count > 0 ? 10 : 0)}%">
+              <span class="text-white text-xs font-bold">${count}</span>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+/**
+ * Render top performing and attention-needed schools
+ */
+function renderPerformanceLists(schools) {
+  const topContainer = document.getElementById('topPerformingSchools');
+  const attentionContainer = document.getElementById('attentionNeededSchools');
+  if (!topContainer && !attentionContainer) return;
+
+  // Sort by total students descending (as a proxy for engagement)
+  const activeSchools = schools.filter((s) => s.isActive);
+
+  const topSchools = [...activeSchools]
+    .sort((a, b) => (b.settings.total_siswa || 0) - (a.settings.total_siswa || 0))
+    .slice(0, 5);
+
+  const attentionSchools = activeSchools.filter((s) => (s.settings.total_siswa || 0) > 0 && (s.settings.total_siswa || 0) < 50);
+  const lowActivitySchools = activeSchools.filter((s) => (s.settings.total_siswa || 0) === 0).slice(0, 5);
+
+  if (topContainer) {
+    if (topSchools.length === 0) {
+      topContainer.innerHTML = '<p class="text-slate-400 text-sm text-center py-4">Belum ada data</p>';
+    } else {
+      topContainer.innerHTML = topSchools.map((school, i) => `
+        <div class="flex items-center gap-3 py-2.5 ${i < topSchools.length - 1 ? 'border-b border-slate-50' : ''}">
+          <div class="w-7 h-7 bg-gradient-to-br from-amber-400 to-amber-500 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+            ${i + 1}
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-slate-700 truncate">${escapeHtml(school.schoolName)}</p>
+            <p class="text-xs text-slate-500">${(school.settings.total_siswa || 0).toLocaleString('id-ID')} siswa · ${(school.settings.total_guru || 0)} guru</p>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+
+  if (attentionContainer) {
+    const allAttention = [...attentionSchools, ...lowActivitySchools].slice(0, 5);
+    if (allAttention.length === 0) {
+      attentionContainer.innerHTML = '<p class="text-slate-400 text-sm text-center py-4">Semua sekolah aktif berjalan dengan baik</p>';
+    } else {
+      attentionContainer.innerHTML = allAttention.map((school) => {
+        const total = school.settings.total_siswa || 0;
+        const reason = total === 0 ? 'Belum memiliki data siswa' : `${total} siswa — perlu perhatian`;
+        return `
+          <div class="flex items-center gap-3 py-2.5 border-b border-slate-50 last:border-0">
+            <div class="w-7 h-7 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <i class="fa-solid fa-exclamation text-red-400 text-xs"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-slate-700 truncate">${escapeHtml(school.schoolName)}</p>
+              <p class="text-xs text-red-500">${reason}</p>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+}
+
+/**
+ * Render configuration page data
+ */
+function renderConfigPage() {
+  const container = document.getElementById('configContent');
+  if (!container) return;
+
+  const config = SMART_ABSEN_CONFIG;
+  const firebaseOk = config.firebase.apiKey && !config.firebase.apiKey.includes('[ISI');
+  const googleOk = config.google.clientId && !config.google.clientId.includes('[ISI');
+  const whatsappOk = config.whatsapp.apiUrl && config.whatsapp.apiKey;
+  const googleApiReady = typeof gapi !== 'undefined' && gapi.client;
+
+  container.innerHTML = `
+    <div class="space-y-6">
+      <!-- System Info -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-info-circle text-blue-500"></i> Informasi Sistem
+        </h3>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-slate-50 rounded-lg p-4">
+            <div class="text-xs text-slate-500 mb-1">Nama Aplikasi</div>
+            <div class="font-semibold text-slate-800">${config.app.name}</div>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-4">
+            <div class="text-xs text-slate-500 mb-1">Versi</div>
+            <div class="font-semibold text-slate-800">v${config.app.version}</div>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-4">
+            <div class="text-xs text-slate-500 mb-1">Email Master Admin</div>
+            <div class="font-semibold text-slate-800 font-mono text-sm">${config.app.masterAdminEmail}</div>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-4">
+            <div class="text-xs text-slate-500 mb-1">User Login Saat Ini</div>
+            <div class="font-semibold text-slate-800 font-mono text-sm">${masterAdmin?.currentUser?.email || '-'}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Status -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-plug text-green-500"></i> Status Koneksi API
+        </h3>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between p-3 rounded-lg ${firebaseOk ? 'bg-green-50' : 'bg-red-50'}">
+            <div class="flex items-center gap-3">
+              <i class="fa-solid fa-fire ${firebaseOk ? 'text-orange-500' : 'text-red-400'} text-lg"></i>
+              <div>
+                <div class="font-semibold text-sm text-slate-800">Firebase</div>
+                <div class="text-xs text-slate-500">Authentication & Firestore</div>
+              </div>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-bold ${firebaseOk ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}">
+              ${firebaseOk ? '● Terhubung' : '● Tidak Terhubung'}
+            </span>
+          </div>
+          <div class="flex items-center justify-between p-3 rounded-lg ${googleOk ? 'bg-green-50' : 'bg-red-50'}">
+            <div class="flex items-center gap-3">
+              <i class="fa-brands fa-google ${googleOk ? 'text-blue-500' : 'text-red-400'} text-lg"></i>
+              <div>
+                <div class="font-semibold text-sm text-slate-800">Google API</div>
+                <div class="text-xs text-slate-500">Sheets & Drive API</div>
+              </div>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-bold ${googleApiReady ? 'bg-green-100 text-green-700' : googleOk ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}">
+              ${googleApiReady ? '● Aktif' : googleOk ? '● Tercatat' : '● Tidak Terhubung'}
+            </span>
+          </div>
+          <div class="flex items-center justify-between p-3 rounded-lg ${whatsappOk ? 'bg-green-50' : 'bg-amber-50'}">
+            <div class="flex items-center gap-3">
+              <i class="fa-brands fa-whatsapp ${whatsappOk ? 'text-green-500' : 'text-amber-400'} text-lg"></i>
+              <div>
+                <div class="font-semibold text-sm text-slate-800">WhatsApp API</div>
+                <div class="text-xs text-slate-500">Notifikasi WhatsApp</div>
+              </div>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-bold ${whatsappOk ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}">
+              ${whatsappOk ? '● Terhubung' : '● Opsional'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- WhatsApp API Configuration (Master Admin Only) -->
+      <div class="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-1 flex items-center gap-2">
+          <i class="fa-brands fa-whatsapp text-green-500"></i>
+          Konfigurasi WhatsApp API
+        </h3>
+        <p class="text-sm text-slate-500 mb-4">Atur API WhatsApp secara terpusat untuk semua sekolah</p>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">API URL</label>
+            <input type="text" id="config-wa-url" class="w-full px-4 py-2.5 border-2 border-slate-200 rounded-lg text-sm focus:border-blue-400 outline-none transition" placeholder="https://api.fonnte.com/send">
+            <p class="text-xs text-slate-400 mt-1">Contoh: Fonnte (https://api.fonnte.com/send), Wablas, dll</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">API Key</label>
+            <input type="password" id="config-wa-key" class="w-full px-4 py-2.5 border-2 border-slate-200 rounded-lg text-sm focus:border-blue-400 outline-none transition" placeholder="Masukkan API key WhatsApp">
+            <p class="text-xs text-slate-400 mt-1">API key dari provider WhatsApp Anda</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Template Pesan (Opsional)</label>
+            <textarea id="config-wa-template" rows="5" class="w-full px-4 py-2.5 border-2 border-slate-200 rounded-lg text-sm focus:border-blue-400 outline-none transition" placeholder="Template pesan WhatsApp...">🚨 *NOTIFIKASI ABSENSI*\n\nYth. Orang Tua/Wali dari *{nama_siswa}*\nKelas: {kelas}\n\n📅 Tanggal: {tanggal}\n⏰ Waktu: {waktu}\n📊 Status: *{status}*\n\nTerima kasih,\n*{nama_sekolah}*</textarea>
+            <p class="text-xs text-slate-400 mt-1">Variabel: {nama_siswa}, {kelas}, {status}, {tanggal}, {waktu}, {nama_sekolah}</p>
+          </div>
+          <div class="flex gap-3">
+            <button onclick="saveWhatsAppConfig()" class="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold text-sm transition inline-flex items-center gap-2">
+              <i class="fa-solid fa-save"></i> Simpan WhatsApp Config
+            </button>
+            <button onclick="testWhatsAppConfig()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-sm transition inline-flex items-center gap-2">
+              <i class="fa-solid fa-flask"></i> Test Kirim
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Global Settings -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-purple-500"></i> Pengaturan Global
+        </h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Tahun Ajaran Default</label>
+            <input type="text" id="configTahunAjaran" value="2025/2026" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Jam Mulai Sekolah</label>
+              <input type="time" id="configJamMulai" value="${config.app.schoolHours?.start || '07:00'}" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Jam Selesai Sekolah</label>
+              <input type="time" id="configJamSelesai" value="${config.app.schoolHours?.end || '15:00'}" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+            </div>
+          </div>
+          <button onclick="saveGlobalSettings()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-sm transition">
+            <i class="fa-solid fa-save mr-1"></i> Simpan Pengaturan
+          </button>
+        </div>
+      </div>
+
+      <!-- Danger Zone -->
+      <div class="bg-white rounded-xl shadow-sm border border-red-200 p-6">
+        <h3 class="text-lg font-bold text-red-600 mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-triangle-exclamation"></i> Zona Berbahaya
+        </h3>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg">
+            <div>
+              <p class="font-semibold text-sm text-slate-800">Nonaktifkan Semua Sekolah</p>
+              <p class="text-xs text-slate-500 mt-1">Semua sekolah akan dinonaktifkan dari sistem</p>
+            </div>
+            <button onclick="dangerDisableAll()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold text-xs transition">
+              Nonaktifkan Semua
+            </button>
+          </div>
+          <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg">
+            <div>
+              <p class="font-semibold text-sm text-slate-800">Reset Semua Data Sekolah</p>
+              <p class="text-xs text-slate-500 mt-1">Hapus semua data absensi di semua sekolah</p>
+            </div>
+            <button onclick="dangerResetAll()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold text-xs transition">
+              Reset Semua
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Load WhatsApp config from Firestore
+  if (masterAdmin && masterAdmin.db) {
+    masterAdmin.db.collection('system_config').doc('whatsapp').get().then(function(doc) {
+      if (doc.exists) {
+        var data = doc.data();
+        var urlInput = document.getElementById('config-wa-url');
+        var keyInput = document.getElementById('config-wa-key');
+        var tmplInput = document.getElementById('config-wa-template');
+        if (urlInput) urlInput.value = data.api_url || '';
+        if (keyInput) keyInput.value = data.api_key || '';
+        if (tmplInput) tmplInput.value = data.template || '';
+      }
+    });
+  }
+}
+
+/**
+ * Save WhatsApp config to Firestore (Master Admin)
+ */
+window.saveWhatsAppConfig = async function() {
+  var apiUrl = document.getElementById('config-wa-url').value.trim();
+  var apiKey = document.getElementById('config-wa-key').value.trim();
+  var template = document.getElementById('config-wa-template').value.trim();
+
+  if (!apiUrl || !apiKey) {
+    showToast('API URL dan API Key wajib diisi!', 'error');
+    return;
+  }
+
+  try {
+    var db = firebase.firestore();
+    await db.collection('system_config').doc('whatsapp').set({
+      api_url: apiUrl,
+      api_key: apiKey,
+      template: template || SMART_ABSEN_CONFIG.whatsapp.template,
+      updated_at: new Date().toISOString(),
+      updated_by: masterAdmin ? masterAdmin.currentUser.email : 'admin'
+    });
+
+    masterAdmin.addActivityLog('update', 'Memperbarui konfigurasi WhatsApp API');
+    showToast('Konfigurasi WhatsApp berhasil disimpan! ✅', 'success');
+  } catch (error) {
+    console.error('Error saving WhatsApp config:', error);
+    showToast('Gagal menyimpan konfigurasi: ' + error.message, 'error');
+  }
+};
+
+/**
+ * Test WhatsApp config by sending a test message
+ */
+window.testWhatsAppConfig = async function() {
+  var testPhone = prompt('Masukkan nomor HP untuk test (format: 628xxx):');
+  if (!testPhone) return;
+
+  var apiUrl = document.getElementById('config-wa-url').value.trim();
+  var apiKey = document.getElementById('config-wa-key').value.trim();
+
+  if (!apiUrl || !apiKey) {
+    showToast('Simpan API URL dan Key terlebih dahulu!', 'warning');
+    return;
+  }
+
+  showToast('Mengirim test WhatsApp...', 'info');
+
+  try {
+    var response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target: testPhone,
+        message: '🧪 *TEST NOTIFIKASI*\n\nIni adalah pesan test dari Smart Absen Enterprise.\nJika Anda menerima pesan ini, konfigurasi WhatsApp sudah benar.\n\n_' + new Date().toLocaleString('id-ID') + '_',
+        apiKey: apiKey
+      })
+    });
+
+    var result = await response.json();
+    if (response.ok) {
+      showToast('Test WhatsApp terkirim! Periksa HP Anda.', 'success');
+    } else {
+      showToast('Gagal: ' + (result.message || JSON.stringify(result)), 'error');
+    }
+  } catch (error) {
+    showToast('Error: ' + error.message, 'error');
+  }
+};
+
+/**
+ * Save global settings to Firestore
+ */
+async function saveGlobalSettings() {
+  if (!masterAdmin || !masterAdmin.db) {
+    showToast('Firebase belum terhubung', 'error');
+    return;
+  }
+
+  try {
+    const tahunAjaran = document.getElementById('configTahunAjaran').value;
+    const jamMulai = document.getElementById('configJamMulai').value;
+    const jamSelesai = document.getElementById('configJamSelesai').value;
+
+    await masterAdmin.db.collection('config').doc('global').set({
+      tahunAjaran: tahunAjaran,
+      schoolHours: { start: jamMulai, end: jamSelesai },
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: masterAdmin.currentUser.email,
+    }, { merge: true });
+
+    masterAdmin.addActivityLog('update', `Memperbarui pengaturan global (TA: ${tahunAjaran})`);
+    showToast('Pengaturan global berhasil disimpan');
+  } catch (error) {
+    showToast('Gagal menyimpan: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Danger zone: Disable all schools
+ */
+async function dangerDisableAll() {
+  if (!confirm('⚠️ PERINGATAN!\n\nAnda akan menonaktifkan SEMUA sekolah dari sistem.\nSemua sekolah tidak akan dapat mengakses sistem.\n\nLanjutkan?')) return;
+  if (!confirm('Konfirmasi sekali lagi: NONAKTIFKAN SEMUA SEKOLAH?')) return;
+
+  try {
+    const batch = masterAdmin.db.batch();
+    masterAdmin.schools.forEach((school) => {
+      const ref = masterAdmin.db.collection('schools').doc(school.id);
+      batch.update(ref, {
+        isActive: false,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+    await batch.commit();
+
+    masterAdmin.addActivityLog('deactivate', `Menonaktifkan SEMUA sekolah (${masterAdmin.schools.length} sekolah)`);
+    showToast('Semua sekolah berhasil dinonaktifkan');
+    await masterAdmin.loadSchools();
+    await masterAdmin.calculateGlobalStats();
+    masterAdmin.refreshUI();
+  } catch (error) {
+    showToast('Gagal: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Danger zone: Reset all schools data
+ */
+async function dangerResetAll() {
+  if (!confirm('🚨 PERINGATAN KRITIS!\n\nAnda akan menghapus SEMUA data absensi di SEMUA sekolah.\n\nTindakan ini TIDAK DAPAT dibatalkan!\n\nLanjutkan?')) return;
+  if (!confirm('KONFIRMASI TERAKHIR: Hapus semua data di semua sekolah?')) return;
+
+  try {
+    const activeSchools = masterAdmin.schools.filter((s) => s.isActive && s.sheetId);
+    let successCount = 0;
+
+    for (const school of activeSchools) {
+      try {
+        await masterAdmin.executeReset(school.id);
+        successCount++;
+      } catch (e) {
+        console.error('Reset failed for', school.schoolName, e);
+      }
+    }
+
+    masterAdmin.addActivityLog('reset', `Reset data ${successCount} dari ${activeSchools.length} sekolah`);
+    showToast(`Reset selesai: ${successCount} sekolah berhasil direset`);
+  } catch (error) {
+    showToast('Gagal: ' + error.message, 'error');
+  }
+}
+
+/**
+ * Close the master modal
+ */
+function closeMasterModal() {
+  const modal = document.getElementById('masterModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+/**
+ * Show toast notification (override if not available from app.js)
+ */
+function showToast(message, type) {
+  if (typeof window.showToast === 'function' && window.showToast !== showToast) {
+    window.showToast(message, type);
+    return;
+  }
+
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'fixed top-4 right-4 z-[9999] space-y-2';
+    document.body.appendChild(container);
+  }
+
+  const colors = {
+    success: 'bg-emerald-500',
+    error: 'bg-red-500',
+    warning: 'bg-amber-500',
+    info: 'bg-blue-500',
+  };
+  const icons = {
+    success: 'fa-circle-check',
+    error: 'fa-circle-xmark',
+    warning: 'fa-triangle-exclamation',
+    info: 'fa-circle-info',
+  };
+
+  const toast = document.createElement('div');
+  toast.className = `${colors[type] || colors.info} text-white px-5 py-3 rounded-xl shadow-lg flex items-center gap-3 text-sm font-semibold min-w-[300px] animate-slide-in`;
+  toast.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i><span>${message}</span>`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 300);
+  }, 3000);
+}
+
+/**
+ * Show modal dialog (override if not available from app.js)
+ */
+function showModal(title, content) {
+  let modal = document.getElementById('masterModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'masterModal';
+    modal.className = 'fixed inset-0 z-[9998] hidden';
+    modal.innerHTML = `
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeMasterModal()"></div>
+      <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto relative">
+          <div class="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+            <h3 class="text-lg font-bold text-slate-800" id="masterModalTitle"></h3>
+            <button onclick="closeMasterModal()" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 rounded-lg transition text-slate-400 hover:text-slate-600">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="px-6 py-5" id="masterModalContent"></div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  const titleEl = document.getElementById('masterModalTitle');
+  const contentEl = document.getElementById('masterModalContent');
+  if (titleEl) titleEl.textContent = title;
+  if (contentEl) contentEl.innerHTML = content;
+  modal.classList.remove('hidden');
+}
+
+/**
+ * Format date (Indonesian)
+ */
+function formatDate(date) {
+  if (!date) return '-';
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Format time (Indonesian)
+ */
+function formatTime(date) {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Generate unique ID
+ */
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+/**
+ * Escape HTML entities
+ */
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ==========================================
+// INITIALIZE FIREBASE (for master admin)
+// ==========================================
+function initFirebase() {
+  const config = SMART_ABSEN_CONFIG.firebase;
+  if (!config || !config.apiKey || config.apiKey.includes('[ISI')) {
+    throw new Error('Konfigurasi Firebase belum lengkap');
+  }
+  if (!firebase.apps.length) {
+    firebase.initializeApp(config);
+  }
+  firebase.firestore().settings({
+    timestampsInSnapshots: true,
+    merge: true,
+  });
+}
+
+// ==========================================
+// INITIALIZE GOOGLE API
+// ==========================================
+function initGoogleAPI() {
+  return new Promise((resolve, reject) => {
+    if (typeof gapi === 'undefined') {
+      reject(new Error('Google API library not loaded'));
+      return;
+    }
+    const config = SMART_ABSEN_CONFIG.google;
+    if (!config || !config.clientId || config.clientId.includes('[ISI')) {
+      reject(new Error('Google Client ID belum dikonfigurasi'));
+      return;
+    }
+    gapi.load('client:auth2', () => {
+      gapi.client.init({
+        apiKey: config.apiKey || '',
+        clientId: config.clientId,
+        scope: config.scopes.join(' '),
+        discoveryDocs: config.discoveryDocs,
+      }).then(() => resolve()).catch((err) => reject(err));
+    });
+  });
+}
+
+// ==========================================
+// INITIALIZATION
+// ==========================================
+
+// Global instance
+const masterAdmin = new MasterAdminService();
+
+// Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    initFirebaseFromStorage();
-    setupLoginListeners();
+  masterAdmin.loadActivityLog();
+
+  // Check if already logged in
+  const savedUser = localStorage.getItem('smart_absen_admin_user');
+  if (savedUser) {
+    try {
+      masterAdmin.currentUser = JSON.parse(savedUser);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  masterAdmin.init();
 });
 
-function setupLoginListeners() {
-    document.getElementById('btnMasterLogin').addEventListener('click', doLogin);
-    document.getElementById('masterPassword').addEventListener('keypress', e => { if (e.key === 'Enter') doLogin(); });
+// Register service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    const swPath = new URL('./sw.js', window.location.href).href;
+    navigator.serviceWorker.register(swPath).catch(() => {});
+  });
 }
-
-// ===== 4. FIREBASE FUNCTIONS =====
-
-function initFirebaseFromStorage() {
-    const savedConfig = localStorage.getItem('masterFirebaseConfig');
-    if (savedConfig) {
-        try {
-            const config = JSON.parse(savedConfig);
-            populateFirebaseForm(config);
-            initializeFirebase(config);
-        } catch (e) {
-            console.error('Failed to parse saved Firebase config:', e);
-            updateLoginFirebaseStatus(false);
-        }
-    } else {
-        updateLoginFirebaseStatus(false);
-    }
-}
-
-async function initializeFirebase(config) {
-    if (!config || !config.apiKey || config.apiKey === 'YOUR_API_KEY_HERE') {
-        firebaseReady = false;
-        updateLoginFirebaseStatus(false);
-        updateFirebaseConnectionUI(false);
-        return false;
-    }
-    try {
-        if (firebaseAppInstance) {
-            try { firebaseAppInstance.delete(); } catch (e) {}
-        }
-        firebaseAppInstance = firebase.initializeApp(config);
-        db = firebase.firestore();
-        await db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-            console.warn('Firestore persistence error:', err.code);
-        });
-        firebaseReady = true;
-        updateLoginFirebaseStatus(true);
-        updateFirebaseConnectionUI(true);
-        console.log('Master Admin: Firebase initialized');
-        return true;
-    } catch (error) {
-        console.error('Firebase init error:', error);
-        firebaseReady = false;
-        updateLoginFirebaseStatus(false);
-        updateFirebaseConnectionUI(false);
-        showToast('Gagal menghubungkan Firebase: ' + error.message, 'error');
-        return false;
-    }
-}
-
-function updateLoginFirebaseStatus(connected) {
-    const dot = document.getElementById('loginFbDot');
-    const text = document.getElementById('loginFbText');
-    if (dot && text) {
-        if (connected) {
-            dot.className = 'w-2 h-2 rounded-full bg-green-400';
-            text.className = 'text-green-400';
-            text.textContent = 'Firebase Terhubung';
-        } else {
-            dot.className = 'w-2 h-2 rounded-full bg-slate-500';
-            text.className = 'text-slate-400';
-            text.textContent = 'Firebase Belum Dikonfigurasi';
-        }
-    }
-}
-
-function updateFirebaseConnectionUI(connected) {
-    const dot = document.getElementById('fbConnDot');
-    const text = document.getElementById('fbConnText');
-    if (dot && text) {
-        if (connected) {
-            dot.className = 'w-3 h-3 rounded-full bg-green-400 animate-pulse';
-            text.className = 'text-sm text-green-700 font-semibold';
-            text.innerHTML = '<i class="fa-solid fa-check-circle mr-1"></i> Firebase Terhubung & Aktif';
-        } else {
-            dot.className = 'w-3 h-3 rounded-full bg-red-400';
-            text.className = 'text-sm text-red-600 font-semibold';
-            text.innerHTML = '<i class="fa-solid fa-times-circle mr-1"></i> Firebase Tidak Terhubung';
-        }
-    }
-}
-
-function populateFirebaseForm(config) {
-    if (!config) return;
-    const fields = {
-        cfgApiKey: config.apiKey,
-        cfgAuthDomain: config.authDomain,
-        cfgProjectId: config.projectId,
-        cfgStorageBucket: config.storageBucket,
-        cfgSenderId: config.messagingSenderId,
-        cfgAppId: config.appId
-    };
-    Object.keys(fields).forEach(id => {
-        const el = document.getElementById(id);
-        if (el && fields[id]) el.value = fields[id];
-    });
-}
-
-function getFirebaseConfigFromForm() {
-    return {
-        apiKey: document.getElementById('cfgApiKey').value.trim(),
-        authDomain: document.getElementById('cfgAuthDomain').value.trim(),
-        projectId: document.getElementById('cfgProjectId').value.trim(),
-        storageBucket: document.getElementById('cfgStorageBucket').value.trim(),
-        messagingSenderId: document.getElementById('cfgSenderId').value.trim(),
-        appId: document.getElementById('cfgAppId').value.trim()
-    };
-}
-
-// ===== 5. LOGIN SYSTEM =====
-
-async function doLogin() {
-    const password = document.getElementById('masterPassword').value.trim();
-    if (!password) return showToast('Masukkan Super Admin Key!', 'warning');
-
-    // Get stored key or use default
-    let storedKey = DEFAULT_SUPER_ADMIN_KEY;
-
-    // If Firebase is ready, try to get key from Firestore
-    if (firebaseReady && db) {
-        try {
-            const doc = await db.collection('appConfig').doc('config').get();
-            if (doc.exists && doc.data().superAdminKey) {
-                storedKey = doc.data().superAdminKey;
-            }
-        } catch (e) {
-            console.warn('Could not fetch super admin key from Firestore:', e);
-        }
-    }
-
-    if (password !== storedKey) {
-        showToast('Super Admin Key salah!', 'error');
-        return;
-    }
-
-    // Login success
-    document.getElementById('login-page').classList.add('hidden');
-    document.getElementById('sidebar').classList.remove('hidden');
-    showPage('dashboard-page');
-    showToast('Selamat datang, Super Admin!');
-
-    // Load all data
-    await refreshAllData();
-}
-
-function doLogout() {
-    if (!confirm('Yakin ingin keluar dari Master Admin Panel?')) return;
-    document.getElementById('masterPassword').value = '';
-    document.getElementById('sidebar').classList.add('hidden');
-    document.getElementById('login-page').classList.remove('hidden');
-    allRegistrations = [];
-    allSchools = [];
-    activityLog = [];
-}
-
-// ===== 6. TOAST NOTIFICATION =====
-function showToast(message, type = 'success') {
-    const container = document.getElementById('toastContainer');
-    const colors = {
-        success: 'bg-green-500', error: 'bg-red-500', warning: 'bg-amber-500', info: 'bg-violet-500'
-    };
-    const icons = {
-        success: 'fa-circle-check', error: 'fa-circle-xmark', warning: 'fa-triangle-exclamation', info: 'fa-circle-info'
-    };
-    const toast = document.createElement('div');
-    toast.className = `toast ${colors[type]} text-white px-5 py-3 rounded-xl shadow-lg flex items-center gap-3 text-sm font-semibold min-w-[280px]`;
-    toast.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span>${message}</span>`;
-    container.appendChild(toast);
-    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
-}
-
-// ===== 7. PAGE NAVIGATION =====
-
-function showPage(id) {
-    const allPages = ['dashboard-page', 'registrations-page', 'schools-page', 'wa-api-page', 'firebase-page', 'appconfig-page', 'activity-page'];
-    allPages.forEach(p => { const el = document.getElementById(p); if (el) el.classList.add('hidden'); });
-    const target = document.getElementById(id);
-    if (target) { target.classList.remove('hidden'); target.classList.add('fade-in'); }
-
-    document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
-    const activeLink = document.querySelector(`.sidebar-link[data-page="${id}"]`);
-    if (activeLink) activeLink.add('active');
-
-    if (id === 'dashboard-page') updateDashboard();
-    if (id === 'registrations-page') renderRegistrationsTable();
-    if (id === 'schools-page') renderSchoolsTable();
-    if (id === 'wa-api-page') renderWaApiPage();
-    if (id === 'firebase-page') updateFirebaseConnectionUI(firebaseReady);
-    if (id === 'appconfig-page') loadAppConfigPage();
-    if (id === 'activity-page') renderActivityLog();
-}
-
-// ===== 8. MODAL HELPERS =====
-
-function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
-
-// ===== 9. DASHBOARD =====
-
-function updateDashboard() {
-    // Date
-    const now = new Date();
-    document.getElementById('dashDate').textContent = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-
-    // Stats
-    document.getElementById('statTotalSchools').textContent = allSchools.length;
-    document.getElementById('statActiveSchools').textContent = allSchools.filter(s => s.isActive !== false).length;
-    document.getElementById('statTotalRegs').textContent = allRegistrations.length;
-    document.getElementById('statPendingRegs').textContent = allRegistrations.filter(r => r.status === 'pending').length;
-    document.getElementById('statRejectedRegs').textContent = allRegistrations.filter(r => r.status === 'rejected').length;
-
-    // Firebase status
-    document.getElementById('dashFbStatus').textContent = firebaseReady ? 'Online' : 'Offline';
-    document.getElementById('dashFbStatus').className = firebaseReady ? 'text-2xl font-black mt-1 text-green-300' : 'text-2xl font-black mt-1 text-red-300';
-
-    // App mode
-    const isMaintenance = appConfigData && appConfigData.maintenanceMode;
-    document.getElementById('dashAppMode').textContent = isMaintenance ? 'Maintenance' : 'Normal';
-    document.getElementById('dashAppMode').className = isMaintenance ? 'text-2xl font-black mt-1 text-amber-300' : 'text-2xl font-black mt-1 text-green-300';
-
-    // Pending badge
-    const pendingCount = allRegistrations.filter(r => r.status === 'pending').length;
-    const badge = document.getElementById('pendingBadge');
-    if (pendingCount > 0) {
-        badge.classList.remove('hidden');
-        badge.textContent = pendingCount;
-    } else {
-        badge.classList.add('hidden');
-    }
-
-    // Recent registrations table
-    const recentBody = document.getElementById('recentRegsTable');
-    const emptyEl = document.getElementById('emptyRecentRegs');
-    const recent = [...allRegistrations].sort((a, b) => {
-        const ta = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
-        const tb = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
-        return tb - ta;
-    }).slice(0, 10);
-
-    if (recent.length === 0) {
-        recentBody.innerHTML = '';
-        emptyEl.classList.remove('hidden');
-    } else {
-        emptyEl.classList.add('hidden');
-        recentBody.innerHTML = recent.map(r => {
-            const date = r.createdAt ? (r.createdAt.toDate ? r.createdAt.toDate() : new Date(r.createdAt)) : null;
-            const dateStr = date ? date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
-            const statusBadge = getStatusBadge(r.status);
-            return `<tr class="border-b border-slate-50 table-row">
-                <td class="p-4 text-xs text-slate-500">${dateStr}</td>
-                <td class="p-4 font-semibold">${escHtml(r.nama)}</td>
-                <td class="p-4">${escHtml(r.sekolah)}</td>
-                <td class="p-4 font-mono text-xs">${escHtml(r.nip)}</td>
-                <td class="p-4">${statusBadge}</td>
-            </tr>`;
-        }).join('');
-    }
-}
-
-function getStatusBadge(status) {
-    const badges = {
-        pending: '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 uppercase">Pending</span>',
-        approved: '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-700 uppercase">Disetujui</span>',
-        rejected: '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-100 text-red-700 uppercase">Ditolak</span>'
-    };
-    return badges[status] || `<span class="text-xs text-slate-400">${escHtml(status)}</span>`;
-}
-
-// ===== 10. REGISTRATIONS MANAGEMENT =====
-
-function filterRegistrations(filter) {
-    currentFilter = filter;
-    // Update tab buttons
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.className = 'tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-white text-slate-600 border border-slate-200';
-    });
-    const activeBtn = document.querySelector(`.tab-btn[data-filter="${filter}"]`);
-    if (activeBtn) {
-        activeBtn.className = 'tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white shadow';
-    }
-    renderRegistrationsTable();
-}
-
-function renderRegistrationsTable() {
-    const body = document.getElementById('registrationsTableBody');
-    const emptyEl = document.getElementById('emptyRegistrations');
-    const search = document.getElementById('searchRegistrations').value.toLowerCase();
-
-    let filtered = allRegistrations;
-    if (currentFilter !== 'all') {
-        filtered = filtered.filter(r => r.status === currentFilter);
-    }
-    if (search) {
-        filtered = filtered.filter(r =>
-            (r.nama || '').toLowerCase().includes(search) ||
-            (r.sekolah || '').toLowerCase().includes(search) ||
-            (r.nip || '').toLowerCase().includes(search)
-        );
-    }
-
-    // Sort by date
-    filtered.sort((a, b) => {
-        const ta = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
-        const tb = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
-        return tb - ta;
-    });
-
-    // Update counts
-    document.getElementById('countAll').textContent = allRegistrations.length;
-    document.getElementById('countPending').textContent = allRegistrations.filter(r => r.status === 'pending').length;
-    document.getElementById('countApproved').textContent = allRegistrations.filter(r => r.status === 'approved').length;
-    document.getElementById('countRejected').textContent = allRegistrations.filter(r => r.status === 'rejected').length;
-
-    if (filtered.length === 0) {
-        body.innerHTML = '';
-        emptyEl.classList.remove('hidden');
-        return;
-    }
-
-    emptyEl.classList.add('hidden');
-    body.innerHTML = filtered.map(r => {
-        const date = r.createdAt ? (r.createdAt.toDate ? r.createdAt.toDate() : new Date(r.createdAt)) : null;
-        const dateStr = date ? date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
-        const statusBadge = getStatusBadge(r.status);
-        const isPending = r.status === 'pending';
-
-        let actionsHtml = '';
-        if (isPending) {
-            actionsHtml = `
-                <button onclick="openApproveModal('${r.id}')" class="px-2 py-1.5 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 text-xs font-semibold transition mr-1" title="Setujui">
-                    <i class="fa-solid fa-check mr-1"></i>Setujui
-                </button>
-                <button onclick="openRejectModal('${r.id}')" class="px-2 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 text-xs font-semibold transition" title="Tolak">
-                    <i class="fa-solid fa-times mr-1"></i>Tolak
-                </button>`;
-        } else {
-            const approvedDate = r.approvedAt ? (r.approvedAt.toDate ? r.approvedAt.toDate() : new Date(r.approvedAt)) : null;
-            const rejectedDate = r.rejectedAt ? (r.rejectedAt.toDate ? r.rejectedAt.toDate() : new Date(r.rejectedAt)) : null;
-            const detailDate = approvedDate || rejectedDate;
-            const detailStr = detailDate ? detailDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
-            actionsHtml = `<span class="text-xs text-slate-400">${detailStr}</span>`;
-        }
-
-        return `<tr class="border-b border-slate-50 table-row">
-            <td class="p-4 text-xs text-slate-500 whitespace-nowrap">${dateStr}</td>
-            <td class="p-4 font-semibold">${escHtml(r.nama)}</td>
-            <td class="p-4 font-mono text-xs">${escHtml(r.nip)}</td>
-            <td class="p-4">${escHtml(r.sekolah)}</td>
-            <td class="p-4 text-xs">${escHtml(r.telp || '-')}</td>
-            <td class="p-4">${statusBadge}</td>
-            <td class="p-4 text-center whitespace-nowrap">${actionsHtml}</td>
-        </tr>`;
-    }).join('');
-}
-
-function openApproveModal(regId) {
-    const reg = allRegistrations.find(r => r.id === regId);
-    if (!reg) return;
-
-    document.getElementById('approveDetail').innerHTML = `
-        <p><strong>Nama:</strong> ${escHtml(reg.nama)}</p>
-        <p><strong>NIP:</strong> ${escHtml(reg.nip)}</p>
-        <p><strong>Sekolah:</strong> ${escHtml(reg.sekolah)}</p>
-        <p><strong>Telepon:</strong> ${escHtml(reg.telp || '-')}</p>
-    `;
-    document.getElementById('btnConfirmApprove').onclick = () => approveRegistration(regId);
-    openModal('modalApprove');
-}
-
-function openRejectModal(regId) {
-    const reg = allRegistrations.find(r => r.id === regId);
-    if (!reg) return;
-
-    document.getElementById('rejectDetail').innerHTML = `
-        <p><strong>Nama:</strong> ${escHtml(reg.nama)}</p>
-        <p><strong>NIP:</strong> ${escHtml(reg.nip)}</p>
-        <p><strong>Sekolah:</strong> ${escHtml(reg.sekolah)}</p>
-    `;
-    document.getElementById('rejectReason').value = '';
-    document.getElementById('btnConfirmReject').onclick = () => {
-        const reason = document.getElementById('rejectReason').value.trim();
-        rejectRegistration(regId, reason);
-    };
-    openModal('modalReject');
-}
-
-async function approveRegistration(regId) {
-    if (!firebaseReady || !db) return showToast('Firebase tidak terhubung!', 'error');
-    
-    const btn = document.getElementById('btnConfirmApprove');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Memproses...';
-
-    try {
-        const regRef = db.collection('registrations').doc(regId);
-        const regDoc = await regRef.get();
-        if (!regDoc.exists) {
-            showToast('Data registrasi tidak ditemukan!', 'error');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Setujui';
-            return;
-        }
-        const regData = regDoc.data();
-
-        // Check NIP uniqueness in schools
-        const existingSchool = await db.collection('schools').where('nip', '==', regData.nip).limit(1).get();
-        if (!existingSchool.empty) {
-            showToast('NIP sudah terdaftar sebagai sekolah!', 'error');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Setujui';
-            return;
-        }
-
-        // Create school document
-        await db.collection('schools').doc().set({
-            nama: regData.nama,
-            nip: regData.nip,
-            sekolah: regData.sekolah,
-            telp: regData.telp || '',
-            gasUrl: '',
-            sheetUrl: '',
-            password: regData.password,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            isActive: true
-        });
-
-        // Update registration status
-        await regRef.update({
-            status: 'approved',
-            approvedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        addActivityLog('approve', `Menyetujui registrasi ${regData.nama} (${regData.sekolah})`);
-        closeModal('modalApprove');
-        showToast('Registrasi berhasil disetujui!');
-        await refreshAllData();
-    } catch (e) {
-        console.error('Approve error:', e);
-        showToast('Gagal menyetujui: ' + e.message, 'error');
-    }
-
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Setujui';
-}
-
-async function rejectRegistration(regId, reason) {
-    if (!firebaseReady || !db) return showToast('Firebase tidak terhubung!', 'error');
-
-    const btn = document.getElementById('btnConfirmReject');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Memproses...';
-
-    try {
-        const regRef = db.collection('registrations').doc(regId);
-        const regDoc = await regRef.get();
-        if (!regDoc.exists) {
-            showToast('Data registrasi tidak ditemukan!', 'error');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-ban mr-1"></i> Tolak';
-            return;
-        }
-        const regData = regDoc.data();
-
-        await regRef.update({
-            status: 'rejected',
-            rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            rejectReason: reason || 'Tidak disebutkan'
-        });
-
-        addActivityLog('reject', `Menolak registrasi ${regData.nama} (${regData.sekolah}). Alasan: ${reason || 'Tidak disebutkan'}`);
-        closeModal('modalReject');
-        showToast('Registrasi ditolak.', 'info');
-        await refreshAllData();
-    } catch (e) {
-        console.error('Reject error:', e);
-        showToast('Gagal menolak: ' + e.message, 'error');
-    }
-
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-ban mr-1"></i> Tolak';
-}
-
-// ===== 11. SCHOOLS MANAGEMENT =====
-
-function renderSchoolsTable() {
-    const body = document.getElementById('schoolsTableBody');
-    const emptyEl = document.getElementById('emptySchools');
-    const search = document.getElementById('searchSchools').value.toLowerCase();
-    const statusFilter = document.getElementById('filterSchoolStatus').value;
-
-    let filtered = allSchools;
-    if (statusFilter === 'active') filtered = filtered.filter(s => s.isActive !== false);
-    else if (statusFilter === 'inactive') filtered = filtered.filter(s => s.isActive === false);
-    if (search) {
-        filtered = filtered.filter(s =>
-            (s.sekolah || '').toLowerCase().includes(search) ||
-            (s.nama || '').toLowerCase().includes(search) ||
-            (s.nip || '').toLowerCase().includes(search)
-        );
-    }
-
-    if (filtered.length === 0) {
-        body.innerHTML = '';
-        emptyEl.classList.remove('hidden');
-        return;
-    }
-
-    emptyEl.classList.add('hidden');
-    body.innerHTML = filtered.map((s, i) => {
-        const isActive = s.isActive !== false;
-        const hasGas = s.gasUrl && s.gasUrl.length > 5;
-        const hasSheet = s.sheetUrl && s.sheetUrl.length > 5;
-        const statusBadge = isActive
-            ? '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-700 uppercase">Aktif</span>'
-            : '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-100 text-red-700 uppercase">Non-Aktif</span>';
-        const gasBadge = hasGas
-            ? '<span class="text-green-600 text-xs" title="' + escHtml(s.gasUrl) + '"><i class="fa-solid fa-check-circle"></i> Terhubung</span>'
-            : '<span class="text-slate-400 text-xs"><i class="fa-solid fa-times-circle"></i> Belum</span>';
-        const sheetBadge = hasSheet
-            ? '<span class="text-green-600 text-xs" title="' + escHtml(s.sheetUrl) + '"><i class="fa-solid fa-check-circle"></i> Ada</span>'
-            : '<span class="text-slate-400 text-xs"><i class="fa-solid fa-times-circle"></i> Belum</span>';
-
-        return `<tr class="border-b border-slate-50 table-row">
-            <td class="p-4 text-xs text-slate-400 font-semibold">${i + 1}</td>
-            <td class="p-4">
-                <p class="font-semibold">${escHtml(s.sekolah || '-')}</p>
-            </td>
-            <td class="p-4 text-sm">${escHtml(s.nama || '-')}</td>
-            <td class="p-4 font-mono text-xs">${escHtml(s.nip || '-')}</td>
-            <td class="p-4">${gasBadge}</td>
-            <td class="p-4">${sheetBadge}</td>
-            <td class="p-4">${statusBadge}</td>
-            <td class="p-4 text-center whitespace-nowrap">
-                <button onclick="openEditSchoolModal('${s.id}')" class="px-2 py-1.5 rounded-lg bg-violet-100 text-violet-700 hover:bg-violet-200 text-xs font-semibold transition mr-1" title="Edit">
-                    <i class="fa-solid fa-pen mr-1"></i>Edit
-                </button>
-                <button onclick="openDeleteSchoolModal('${s.id}')" class="px-2 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 text-xs font-semibold transition" title="Hapus">
-                    <i class="fa-solid fa-trash"></i>
-                </button>
-            </td>
-        </tr>`;
-    }).join('');
-}
-
-function openEditSchoolModal(schoolId) {
-    const school = allSchools.find(s => s.id === schoolId);
-    if (!school) return;
-
-    document.getElementById('editSchoolId').value = schoolId;
-    document.getElementById('editSchoolNama').value = school.sekolah || '';
-    document.getElementById('editSchoolAdmin').value = school.nama || '';
-    document.getElementById('editSchoolNip').value = school.nip || '';
-    document.getElementById('editSchoolTelp').value = school.telp || '';
-    document.getElementById('editSchoolGasUrl').value = school.gasUrl || '';
-    document.getElementById('editSchoolSheetUrl').value = school.sheetUrl || '';
-    document.getElementById('editSchoolWaEnabled').checked = !!school.waEnabled;
-    document.getElementById('editSchoolWaProvider').value = school.waProvider || '';
-    document.getElementById('editSchoolWaApiKey').value = school.waApiKey || '';
-    document.getElementById('editSchoolWaSender').value = school.waSender || '';
-    document.getElementById('editSchoolWaWebhook').value = school.waWebhook || '';
-    document.getElementById('editSchoolPassword').value = '';
-    document.getElementById('editSchoolActive').checked = school.isActive !== false;
-    document.getElementById('editSchoolTitle').textContent = school.sekolah || school.nama;
-    openModal('modalEditSchool');
-}
-
-async function saveSchoolConfig() {
-    if (!firebaseReady || !db) return showToast('Firebase tidak terhubung!', 'error');
-
-    const schoolId = document.getElementById('editSchoolId').value;
-    const data = {
-        telp: document.getElementById('editSchoolTelp').value.trim(),
-        gasUrl: document.getElementById('editSchoolGasUrl').value.trim(),
-        sheetUrl: document.getElementById('editSchoolSheetUrl').value.trim(),
-        isActive: document.getElementById('editSchoolActive').checked,
-        waEnabled: document.getElementById('editSchoolWaEnabled').checked,
-        waProvider: document.getElementById('editSchoolWaProvider').value,
-        waApiKey: document.getElementById('editSchoolWaApiKey').value.trim(),
-        waSender: document.getElementById('editSchoolWaSender').value.trim(),
-        waWebhook: document.getElementById('editSchoolWaWebhook').value.trim()
-    };
-
-    const newPassword = document.getElementById('editSchoolPassword').value.trim();
-    if (newPassword) {
-        data.password = newPassword;
-    }
-
-    try {
-        await db.collection('schools').doc(schoolId).update(data);
-        const school = allSchools.find(s => s.id === schoolId);
-        addActivityLog('edit', `Mengedit konfigurasi sekolah: ${school ? school.sekolah : schoolId}`);
-        closeModal('modalEditSchool');
-        showToast('Konfigurasi sekolah berhasil disimpan!');
-        await refreshAllData();
-    } catch (e) {
-        console.error('Save school config error:', e);
-        showToast('Gagal menyimpan: ' + e.message, 'error');
-    }
-}
-
-// ===== 12. WHATSAPP API MANAGEMENT =====
-
-function renderWaApiPage() {
-    const cardsEl = document.getElementById('waApiCards');
-    const emptyEl = document.getElementById('emptyWaApi');
-    const search = (document.getElementById('searchWaApi') || {}).value || '';
-    const searchLower = search.toLowerCase();
-
-    let filtered = allSchools;
-    if (searchLower) {
-        filtered = filtered.filter(s =>
-            (s.sekolah || '').toLowerCase().includes(searchLower) ||
-            (s.nama || '').toLowerCase().includes(searchLower) ||
-            (s.nip || '').toLowerCase().includes(searchLower)
-        );
-    }
-
-    // Stats
-    const waConnected = allSchools.filter(s => s.waEnabled && s.waApiKey).length;
-    document.getElementById('statWaConnected').textContent = waConnected;
-    document.getElementById('statWaDisconnected').textContent = allSchools.length - waConnected;
-    document.getElementById('statWaTotal').textContent = allSchools.length;
-
-    if (filtered.length === 0) {
-        cardsEl.innerHTML = '';
-        emptyEl.classList.remove('hidden');
-        return;
-    }
-    emptyEl.classList.add('hidden');
-
-    cardsEl.innerHTML = filtered.map(s => {
-        const isActive = s.isActive !== false;
-        const waOn = !!s.waEnabled && !!s.waApiKey;
-        const provider = s.waProvider || '-';
-        const providerLabels = { fonnte: 'Fonnte', wablas: 'Wablas', zenziva: 'Zenziva', twilio: 'Twilio', custom: 'Custom API' };
-        const providerLabel = providerLabels[provider] || provider;
-        const maskedKey = s.waApiKey ? (s.waApiKey.substring(0, 6) + '••••••••') : '-';
-        const sender = s.waSender || '-';
-        const statusBg = waOn ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200';
-        const statusIcon = waOn ? 'fa-whatsapp text-green-600' : 'fa-plug text-slate-400';
-        const statusText = waOn ? '<span class="text-green-700 font-bold">Aktif</span>' : '<span class="text-slate-500">Belum dikonfigurasi</span>';
-
-        return `<div class="bg-white rounded-2xl shadow-sm border ${statusBg} p-5 fade-in">
-            <div class="flex items-start justify-between mb-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 ${waOn ? 'bg-green-100' : 'bg-slate-100'} rounded-xl flex items-center justify-center">
-                        <i class="fa-brands ${statusIcon} text-lg"></i>
-                    </div>
-                    <div>
-                        <h4 class="font-bold text-slate-800">${escHtml(s.sekolah || '-')}</h4>
-                        <p class="text-xs text-slate-400">Admin: ${escHtml(s.nama || '-')} | NIP: ${escHtml(s.nip || '-')}</p>
-                    </div>
-                </div>
-                ${!isActive ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600">NON-AKTIF</span>' : ''}
-            </div>
-            <div class="grid grid-cols-2 gap-3 mb-4 text-xs">
-                <div class="bg-slate-50 rounded-lg p-2.5">
-                    <p class="text-slate-400 font-semibold">Status</p>
-                    <p>${statusText}</p>
-                </div>
-                <div class="bg-slate-50 rounded-lg p-2.5">
-                    <p class="text-slate-400 font-semibold">Provider</p>
-                    <p class="font-semibold text-slate-700">${escHtml(providerLabel)}</p>
-                </div>
-                <div class="bg-slate-50 rounded-lg p-2.5">
-                    <p class="text-slate-400 font-semibold">API Key</p>
-                    <p class="font-mono text-slate-600">${escHtml(maskedKey)}</p>
-                </div>
-                <div class="bg-slate-50 rounded-lg p-2.5">
-                    <p class="text-slate-400 font-semibold">Sender</p>
-                    <p class="font-mono text-slate-600">${escHtml(sender)}</p>
-                </div>
-            </div>
-            <div class="flex gap-2">
-                <button onclick="openEditWaApiModal('${s.id}')" class="flex-1 ${waOn ? 'btn-primary' : 'btn-success'} text-white px-3 py-2 rounded-xl font-semibold text-xs flex items-center justify-center">
-                    <i class="fa-solid ${waOn ? 'fa-pen' : 'fa-plus'} mr-1"></i> ${waOn ? 'Edit API' : 'Atur API'}
-                </button>
-                ${waOn ? `<button onclick="testWaApi('${s.id}')" class="px-3 py-2 rounded-xl font-semibold text-xs flex items-center bg-blue-50 text-blue-700 hover:bg-blue-100 transition">
-                    <i class="fa-solid fa-paper-plane mr-1"></i> Test
-                </button>` : ''}
-            </div>
-        </div>`;
-    }).join('');
-}
-
-function openEditWaApiModal(schoolId) {
-    // Reuse the edit school modal but scroll to WA section
-    openEditSchoolModal(schoolId);
-    // Scroll to WA section in modal
-    setTimeout(() => {
-        const waSection = document.querySelector('#modalEditSchool .border-t.border-slate-200');
-        if (waSection) waSection.scrollIntoView({ behavior: 'smooth' });
-    }, 200);
-}
-
-async function testWaApi(schoolId) {
-    const school = allSchools.find(s => s.id === schoolId);
-    if (!school) return;
-
-    if (!school.waApiKey) return showToast('API Key belum diatur!', 'warning');
-
-    showToast('Mengirim test WhatsApp...', 'info');
-
-    const targetPhone = school.telp || school.waSender || '';
-    if (!targetPhone || targetPhone.length < 10) {
-        return showToast('Tidak ada nomor tujuan untuk test!', 'error');
-    }
-
-    const testMessage = `[Smart Absen] Test WhatsApp API - Sekolah: ${school.sekolah || school.nama}. Notifikasi WhatsApp berhasil terhubung!`;
-
-    try {
-        let success = false;
-
-        if (school.waProvider === 'fonnte') {
-            const res = await fetch('https://api.fonnte.com/send', {
-                method: 'POST',
-                headers: { 'Authorization': school.waApiKey },
-                body: JSON.stringify({ target: targetPhone, message: testMessage })
-            });
-            const result = await res.json();
-            success = result.status === true;
-        } else if (school.waProvider === 'wablas') {
-            const res = await fetch('https://ogo.wablas.com/api/send-message', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': school.waApiKey },
-                body: JSON.stringify({ phone: targetPhone, message: testMessage })
-            });
-            const result = await res.json();
-            success = result.status === true || result.code === 200;
-        } else if (school.waProvider === 'zenziva') {
-            const res = await fetch(`https://api.zenziva.net/v2/sendwa/${school.waApiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `phonecode=${targetPhone}&message=${encodeURIComponent(testMessage)}`
-            });
-            const result = await res.json();
-            success = result.status === 'Success' || result.messageId;
-        } else if (school.waProvider === 'custom' && school.waWebhook) {
-            const res = await fetch(school.waWebhook, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${school.waApiKey}` },
-                body: JSON.stringify({ target: targetPhone, message: testMessage, sender: school.waSender || '' })
-            });
-            success = res.ok;
-        } else {
-            showToast('Provider tidak dikenali atau Webhook kosong!', 'warning');
-            return;
-        }
-
-        if (success) {
-            showToast('Test WhatsApp berhasil terkirim ke ' + targetPhone + '!', 'success');
-            addActivityLog('broadcast', `Test WA berhasil: ${school.sekolah} (${school.waProvider})`);
-        } else {
-            showToast('Test WhatsApp gagal. Cek API Key dan nomor tujuan.', 'error');
-        }
-    } catch (e) {
-        console.error('Test WA API error:', e);
-        showToast('Error test WA: ' + e.message, 'error');
-    }
-}
-
-function openDeleteSchoolModal(schoolId) {
-    const school = allSchools.find(s => s.id === schoolId);
-    if (!school) return;
-
-    document.getElementById('deleteSchoolDetail').innerHTML = `
-        <p class="font-semibold text-red-800">${escHtml(school.sekolah || school.nama)}</p>
-        <p class="text-sm text-red-600 mt-1">Admin: ${escHtml(school.nama)} | NIP: ${escHtml(school.nip)}</p>
-    `;
-    document.getElementById('btnConfirmDeleteSchool').onclick = () => deleteSchool(schoolId);
-    openModal('modalDeleteSchool');
-}
-
-async function deleteSchool(schoolId) {
-    if (!firebaseReady || !db) return showToast('Firebase tidak terhubung!', 'error');
-
-    const btn = document.getElementById('btnConfirmDeleteSchool');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Menghapus...';
-
-    try {
-        const school = allSchools.find(s => s.id === schoolId);
-        await db.collection('schools').doc(schoolId).delete();
-        addActivityLog('delete', `Menghapus sekolah: ${school ? school.sekolah : schoolId}`);
-        closeModal('modalDeleteSchool');
-        showToast('Sekolah berhasil dihapus.', 'info');
-        await refreshAllData();
-    } catch (e) {
-        console.error('Delete school error:', e);
-        showToast('Gagal menghapus: ' + e.message, 'error');
-    }
-
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-trash mr-1"></i> Ya, Hapus';
-}
-
-// ===== 12. FIREBASE CONFIG MANAGEMENT =====
-
-async function testFirebaseConnection() {
-    const config = getFirebaseConfigFromForm();
-    if (!config.apiKey) return showToast('API Key wajib diisi!', 'warning');
-
-    showToast('Menguji koneksi Firebase...', 'info');
-
-    try {
-        // Temporarily initialize
-        if (firebaseAppInstance) {
-            try { firebaseAppInstance.delete(); } catch (e) {}
-            firebaseAppInstance = null;
-        }
-
-        const tempApp = firebase.initializeApp(config, 'test-connection');
-        const tempDb = tempDb = tempApp.firestore();
-        // Try a simple read
-        await tempDb.collection('appConfig').doc('config').get().catch(() => {});
-        
-        await tempApp.delete();
-        showToast('Koneksi Firebase berhasil!', 'success');
-    } catch (e) {
-        console.error('Test connection error:', e);
-        // Clean up
-        try {
-            const testApp = firebase.apps.find(a => a.name === 'test-connection');
-            if (testApp) await testApp.delete();
-        } catch (err) {}
-        showToast('Koneksi gagal: ' + e.message, 'error');
-    }
-}
-
-async function saveFirebaseConfig() {
-    const config = getFirebaseConfigFromForm();
-    if (!config.apiKey) return showToast('API Key wajib diisi!', 'warning');
-    if (!config.projectId) return showToast('Project ID wajib diisi!', 'warning');
-
-    showToast('Menyimpan konfigurasi...', 'info');
-
-    // Save to localStorage
-    localStorage.setItem('masterFirebaseConfig', JSON.stringify(config));
-
-    // Reinitialize Firebase
-    const success = await initializeFirebase(config);
-    if (success) {
-        addActivityLog('config', 'Konfigurasi Firebase diperbarui');
-        showToast('Konfigurasi Firebase berhasil disimpan & terhubung!', 'success');
-    } else {
-        showToast('Konfigurasi disimpan tetapi gagal terhubung.', 'warning');
-    }
-}
-
-function clearFirebaseConfig() {
-    if (!confirm('Yakin ingin menghapus konfigurasi Firebase?')) return;
-
-    localStorage.removeItem('masterFirebaseConfig');
-    
-    // Clear form
-    ['cfgApiKey', 'cfgAuthDomain', 'cfgProjectId', 'cfgStorageBucket', 'cfgSenderId', 'cfgAppId'].forEach(id => {
-        document.getElementById(id).value = '';
-    });
-
-    // Reset Firebase
-    if (firebaseAppInstance) {
-        try { firebaseAppInstance.delete(); } catch (e) {}
-        firebaseAppInstance = null;
-    }
-    db = null;
-    firebaseReady = false;
-    updateFirebaseConnectionUI(false);
-    addActivityLog('config', 'Konfigurasi Firebase dihapus');
-    showToast('Konfigurasi Firebase berhasil dihapus.', 'info');
-}
-
-// ===== 13. APP CONFIG =====
-
-async function loadAppConfigPage() {
-    if (!firebaseReady || !db) {
-        document.getElementById('cfgSuperAdminKey').value = DEFAULT_SUPER_ADMIN_KEY;
-        document.getElementById('cfgMaintenance').checked = false;
-        return;
-    }
-
-    try {
-        const doc = await db.collection('appConfig').doc('config').get();
-        if (doc.exists) {
-            const data = doc.data();
-            appConfigData = data;
-            document.getElementById('cfgSuperAdminKey').value = data.superAdminKey || DEFAULT_SUPER_ADMIN_KEY;
-            document.getElementById('cfgMaintenance').checked = !!data.maintenanceMode;
-            document.getElementById('cfgBroadcastMsg').value = data.broadcastMessage || '';
-        } else {
-            appConfigData = { superAdminKey: DEFAULT_SUPER_ADMIN_KEY, maintenanceMode: false };
-            document.getElementById('cfgSuperAdminKey').value = DEFAULT_SUPER_ADMIN_KEY;
-            document.getElementById('cfgMaintenance').checked = false;
-        }
-    } catch (e) {
-        console.error('Load app config error:', e);
-        document.getElementById('cfgSuperAdminKey').value = DEFAULT_SUPER_ADMIN_KEY;
-    }
-}
-
-async function saveSuperAdminKey() {
-    const newKey = document.getElementById('cfgSuperAdminKey').value.trim();
-    if (!newKey || newKey.length < 4) return showToast('Key minimal 4 karakter!', 'warning');
-
-    if (firebaseReady && db) {
-        try {
-            await db.collection('appConfig').doc('config').set({
-                superAdminKey: newKey,
-                maintenanceMode: document.getElementById('cfgMaintenance').checked,
-                broadcastMessage: document.getElementById('cfgBroadcastMsg').value.trim(),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                version: APP_VERSION
-            }, { merge: true });
-            addActivityLog('config', 'Super Admin Key diperbarui');
-            showToast('Super Admin Key berhasil disimpan ke Firebase!', 'success');
-        } catch (e) {
-            showToast('Gagal menyimpan: ' + e.message, 'error');
-        }
-    } else {
-        showToast('Firebase tidak terhubung. Key hanya disimpan di localStorage.', 'warning');
-    }
-}
-
-async function toggleMaintenance() {
-    const isMaintenance = document.getElementById('cfgMaintenance').checked;
-
-    if (firebaseReady && db) {
-        try {
-            await db.collection('appConfig').doc('config').set({
-                maintenanceMode: isMaintenance,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-            addActivityLog('config', `Maintenance mode ${isMaintenance ? 'diaktifkan' : 'dinonaktifkan'}`);
-            showToast(`Maintenance mode ${isMaintenance ? 'diaktifkan' : 'dinonaktifkan'}!`, isMaintenance ? 'warning' : 'success');
-        } catch (e) {
-            document.getElementById('cfgMaintenance').checked = !isMaintenance;
-            showToast('Gagal mengubah: ' + e.message, 'error');
-        }
-    } else {
-        document.getElementById('cfgMaintenance').checked = !isMaintenance;
-        showToast('Firebase tidak terhubung!', 'error');
-    }
-}
-
-async function saveBroadcastMessage() {
-    const msg = document.getElementById('cfgBroadcastMsg').value.trim();
-    if (!msg) return showToast('Pesan broadcast kosong!', 'warning');
-
-    if (firebaseReady && db) {
-        try {
-            await db.collection('appConfig').doc('config').set({
-                broadcastMessage: msg,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-            addActivityLog('broadcast', `Pesan broadcast dikirim: "${msg.substring(0, 50)}..."`);
-            showToast('Pesan broadcast berhasil dikirim!', 'success');
-        } catch (e) {
-            showToast('Gagal mengirim: ' + e.message, 'error');
-        }
-    } else {
-        showToast('Firebase tidak terhubung!', 'error');
-    }
-}
-
-async function clearBroadcastMessage() {
-    if (firebaseReady && db) {
-        try {
-            await db.collection('appConfig').doc('config').set({
-                broadcastMessage: '',
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-            document.getElementById('cfgBroadcastMsg').value = '';
-            addActivityLog('broadcast', 'Pesan broadcast dihapus');
-            showToast('Pesan broadcast berhasil dihapus!', 'success');
-        } catch (e) {
-            showToast('Gagal menghapus: ' + e.message, 'error');
-        }
-    } else {
-        showToast('Firebase tidak terhubung!', 'error');
-    }
-}
-
-// ===== 14. ACTIVITY LOG =====
-
-function addActivityLog(type, message) {
-    activityLog.unshift({
-        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-        type: type,
-        message: message,
-        timestamp: new Date().toISOString()
-    });
-    // Keep max 200 entries
-    if (activityLog.length > 200) activityLog = activityLog.slice(0, 200);
-    // Save to localStorage
-    localStorage.setItem('masterActivityLog', JSON.stringify(activityLog));
-}
-
-function renderActivityLog() {
-    const body = document.getElementById('activityLogBody');
-    const emptyEl = document.getElementById('emptyActivityLog');
-
-    if (activityLog.length === 0) {
-        body.innerHTML = '';
-        emptyEl.classList.remove('hidden');
-        return;
-    }
-
-    emptyEl.classList.add('hidden');
-    body.innerHTML = activityLog.map(log => {
-        const date = new Date(log.timestamp);
-        const dateStr = date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        
-        const typeIcons = {
-            approve: '<span class="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-check text-green-600 text-xs"></i></span>',
-            reject: '<span class="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-times text-red-600 text-xs"></i></span>',
-            edit: '<span class="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-pen text-blue-600 text-xs"></i></span>',
-            delete: '<span class="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-trash text-red-600 text-xs"></i></span>',
-            config: '<span class="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-gear text-violet-600 text-xs"></i></span>',
-            broadcast: '<span class="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0"><i class="fa-solid fa-bullhorn text-amber-600 text-xs"></i></span>'
-        };
-        const icon = typeIcons[log.type] || typeIcons.config;
-
-        return `<tr class="border-b border-slate-50 table-row">
-            <td class="p-4 text-xs text-slate-500 whitespace-nowrap">${dateStr}</td>
-            <td class="p-4">${icon}</td>
-            <td class="p-4 text-sm">${escHtml(log.message)}</td>
-        </tr>`;
-    }).join('');
-}
-
-function loadActivityLogFromStorage() {
-    try {
-        activityLog = JSON.parse(localStorage.getItem('masterActivityLog')) || [];
-    } catch (e) {
-        activityLog = [];
-    }
-}
-
-// ===== 15. DATA REFRESH =====
-
-async function refreshAllData() {
-    if (!firebaseReady || !db) return;
-    showToast('Memuat data...', 'info');
-    await Promise.all([
-        loadRegistrations(),
-        loadSchools(),
-        loadAppConfig()
-    ]);
-    loadActivityLogFromStorage();
-    updateDashboard();
-}
-
-async function refreshSchools() {
-    if (!firebaseReady || !db) return;
-    showToast('Memuat data sekolah...', 'info');
-    await loadSchools();
-    renderSchoolsTable();
-}
-
-function refreshActivityLog() {
-    loadActivityLogFromStorage();
-    renderActivityLog();
-    showToast('Log aktivitas diperbarui.', 'info');
-}
-
-async function loadRegistrations() {
-    if (!firebaseReady || !db) { allRegistrations = []; return; }
-    try {
-        const snap = await db.collection('registrations').orderBy('createdAt', 'desc').get();
-        allRegistrations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch (e) {
-        console.error('Load registrations error:', e);
-        allRegistrations = [];
-    }
-}
-
-async function loadSchools() {
-    if (!firebaseReady || !db) { allSchools = []; return; }
-    try {
-        const snap = await db.collection('schools').orderBy('createdAt', 'desc').get();
-        allSchools = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch (e) {
-        console.error('Load schools error:', e);
-        allSchools = [];
-    }
-}
-
-async function loadAppConfig() {
-    if (!firebaseReady || !db) { appConfigData = null; return; }
-    try {
-        const doc = await db.collection('appConfig').doc('config').get();
-        appConfigData = doc.exists ? doc.data() : null;
-    } catch (e) {
-        console.error('Load app config error:', e);
-        appConfigData = null;
-    }
-}
-
-// ===== 16. UTILITIES =====
-
-function escHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
-// ===== INIT =====
-loadActivityLogFromStorage();
