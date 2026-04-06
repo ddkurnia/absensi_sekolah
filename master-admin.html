@@ -1,872 +1,1215 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Absen Enterprise — Master Admin</title>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#7c3aed">
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: { 50:'#f0fdfa',100:'#ccfbf1',200:'#99f6e4',300:'#5eead4',400:'#2dd4bf',500:'#14b8a6',600:'#0d9488',700:'#0f766e',800:'#115e59',900:'#134e4a' },
-                        violet: { 50:'#f5f3ff',100:'#ede9fe',200:'#ddd6fe',300:'#c4b5fd',400:'#a78bfa',500:'#8b5cf6',600:'#7c3aed',700:'#6d28d9',800:'#5b21b6',900:'#4c1d95' },
-                        accent: { 50:'#fdf4ff',100:'#fae8ff',200:'#f5d0fe',300:'#f0abfc',400:'#e879f9',500:'#d946ef',600:'#c026d3',700:'#a21caf',800:'#86198f',900:'#701a75' }
-                    }
-                }
-            }
-        }
-    </script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- Firebase SDK v10 (compat mode for script tags) -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-    
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-        * { font-family: 'Inter', sans-serif; }
-        
-        .glass-card { background: rgba(255,255,255,0.12); backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.18); }
-        .glass-dark { background: rgba(15,23,42,0.6); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); }
-        .hide-scroll::-webkit-scrollbar { display: none; }
-        .custom-scroll::-webkit-scrollbar { width: 6px; }
-        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        .sidebar-link { transition: all 0.2s ease; border-left: 3px solid transparent; }
-        .sidebar-link:hover, .sidebar-link.active { background: rgba(124,58,237,0.15); border-left-color: #8b5cf6; color: #c4b5fd; }
-        
-        .stat-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-        .stat-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.1); }
-        
-        .fade-in { animation: fadeIn 0.3s ease; }
-        @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-        .slide-in { animation: slideIn 0.3s ease; }
-        @keyframes slideIn { from { opacity:0; transform:translateX(-20px); } to { opacity:1; transform:translateX(0); } }
-        .pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
-        @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 20px rgba(139,92,246,0.3); } 50% { box-shadow: 0 0 40px rgba(139,92,246,0.6); } }
-        
-        .modal-overlay { background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); }
-        
-        .btn-primary { background: linear-gradient(135deg, #7c3aed, #6d28d9); transition: all 0.2s ease; }
-        .btn-primary:hover { background: linear-gradient(135deg, #8b5cf6, #7c3aed); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(124,58,237,0.3); }
-        .btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); transition: all 0.2s ease; }
-        .btn-danger:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239,68,68,0.3); }
-        .btn-success { background: linear-gradient(135deg, #10b981, #059669); transition: all 0.2s ease; }
-        .btn-success:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.3); }
-        .btn-warning { background: linear-gradient(135deg, #f59e0b, #d97706); transition: all 0.2s ease; }
-        .btn-warning:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245,158,11,0.3); }
-        .btn-secondary { background: linear-gradient(135deg, #475569, #334155); transition: all 0.2s ease; }
-        .btn-secondary:hover { transform: translateY(-1px); }
-        
-        .input-modern { transition: border-color 0.2s ease, box-shadow 0.2s ease; }
-        .input-modern:focus { border-color: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,0.15); outline: none; }
-        
-        .table-row:hover { background-color: #f5f3ff; }
-        
-        .toast { animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s; }
-        @keyframes toastIn { from { opacity:0; transform:translateY(-20px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes toastOut { from { opacity:1; } to { opacity:0; transform:translateY(-20px); } }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Smart Absen Enterprise v2.0 — Master Admin Panel">
+  <meta name="theme-color" content="#0f4c75">
+  <title>Master Admin — Smart Absen Enterprise v2.0</title>
+  <link rel="manifest" href="manifest.json">
 
-        .badge-pulse { animation: badgePulse 1.5s ease-in-out infinite; }
-        @keyframes badgePulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
-        .config-field { background: #1e1b4b; color: #e0e7ff; }
-        .config-field:focus { border-color: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,0.3); }
-    </style>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* ==========================================
+       BASE STYLES
+       ========================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ==========================================
+       ANIMATIONS
+       ========================================== */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+    .animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+    /* ==========================================
+       LOADING OVERLAY
+       ========================================== */
+    #globalLoading {
+      position: fixed; inset: 0; z-index: 10000;
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(10px);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 16px;
+    }
+    .loading-spinner {
+      width: 48px; height: 48px;
+      border: 4px solid rgba(255,255,255,0.2);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .loading-message { color: #94a3b8; font-size: 14px; font-weight: 500; }
+
+    /* ==========================================
+       LOGIN PAGE
+       ========================================== */
+    .login-page {
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f4c75 100%);
+      padding: 20px;
+    }
+    .login-card {
+      background: white;
+      border-radius: 24px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+      padding: 48px 40px;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+    }
+    .login-logo {
+      width: 72px; height: 72px;
+      background: linear-gradient(135deg, #0f4c75, #3282b8);
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 32px;
+      box-shadow: 0 8px 24px rgba(15, 76, 117, 0.4);
+    }
+    .login-title { font-size: 24px; font-weight: 800; color: #0f172a; margin-bottom: 4px; }
+    .login-subtitle { font-size: 14px; color: #64748b; margin-bottom: 32px; }
+    .btn-google {
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      width: 100%; padding: 14px 24px;
+      background: white;
+      border: 2px solid #e2e8f0;
+      border-radius: 14px;
+      font-size: 15px; font-weight: 600; color: #334155;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-google:hover {
+      border-color: #3b82f6;
+      background: #f8fafc;
+      box-shadow: 0 4px 12px rgba(59,130,246,0.15);
+    }
+    .btn-google img { width: 20px; height: 20px; }
+    .login-footer { margin-top: 24px; font-size: 12px; color: #94a3b8; }
+    .login-footer a { color: #3b82f6; text-decoration: none; }
+    .login-footer a:hover { text-decoration: underline; }
+
+    /* ==========================================
+       ADMIN PANEL LAYOUT
+       ========================================== */
+    .admin-panel { display: none; min-height: 100vh; }
+    .admin-panel.active { display: flex; flex-direction: column; }
+
+    /* Header */
+    .admin-header {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0 24px;
+      height: 64px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .header-logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #0f4c75, #3282b8);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 800; font-size: 14px;
+    }
+    .header-brand { display: flex; flex-direction: column; }
+    .header-brand-name { font-size: 15px; font-weight: 700; color: #0f172a; line-height: 1.2; }
+    .header-brand-sub { font-size: 11px; color: #94a3b8; font-weight: 500; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .header-btn {
+      width: 38px; height: 38px;
+      border-radius: 10px; border: 1px solid #e2e8f0;
+      background: white; color: #64748b;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s;
+      font-size: 14px;
+    }
+    .header-btn:hover { background: #f1f5f9; color: #334155; border-color: #cbd5e1; }
+    .header-btn.refreshing i { animation: spin 1s linear infinite; }
+    .header-user { display: flex; align-items: center; gap: 10px; padding: 4px 12px 4px 4px; border-radius: 12px; cursor: default; }
+    .header-user:hover { background: #f8fafc; }
+    .header-avatar {
+      width: 34px; height: 34px; border-radius: 10px;
+      background: linear-gradient(135deg, #0f4c75, #3282b8);
+      color: white; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 13px;
+    }
+    .header-avatar img { width: 34px; height: 34px; border-radius: 10px; object-fit: cover; }
+    .header-user-info { text-align: left; }
+    .header-user-name { font-size: 13px; font-weight: 600; color: #1e293b; line-height: 1.2; }
+    .header-user-role { font-size: 10px; color: #94a3b8; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    .header-divider { width: 1px; height: 28px; background: #e2e8f0; }
+    .btn-logout {
+      padding: 8px 16px; border-radius: 10px;
+      background: #fef2f2; color: #dc2626;
+      border: 1px solid #fecaca; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .btn-logout:hover { background: #dc2626; color: white; border-color: #dc2626; }
+
+    /* Content area with sidebar */
+    .admin-body { display: flex; flex: 1; }
+
+    /* Sidebar */
+    .admin-sidebar {
+      width: 260px; min-width: 260px;
+      background: #1a1a2e;
+      color: white;
+      display: flex; flex-direction: column;
+      height: calc(100vh - 64px);
+      position: sticky; top: 64px;
+      overflow-y: auto;
+      transition: all 0.3s;
+    }
+    .admin-sidebar.collapsed { width: 72px; min-width: 72px; }
+    .sidebar-toggle {
+      padding: 16px; display: flex; justify-content: flex-end;
+    }
+    .sidebar-toggle button {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: rgba(255,255,255,0.1); border: none;
+      color: rgba(255,255,255,0.6); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s; font-size: 12px;
+    }
+    .sidebar-toggle button:hover { background: rgba(255,255,255,0.2); color: white; }
+    .sidebar-nav { padding: 0 12px; flex: 1; }
+    .nav-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; border-radius: 12px;
+      color: rgba(255,255,255,0.6);
+      text-decoration: none;
+      font-size: 14px; font-weight: 500;
+      cursor: pointer; transition: all 0.2s;
+      margin-bottom: 2px;
+      white-space: nowrap; overflow: hidden;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
+    .nav-item.active {
+      background: linear-gradient(135deg, #0f4c75, #3282b8);
+      color: white;
+      box-shadow: 0 4px 12px rgba(15, 76, 117, 0.4);
+    }
+    .nav-item i { width: 20px; text-align: center; font-size: 16px; flex-shrink: 0; }
+    .nav-item span { overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-footer {
+      padding: 16px; border-top: 1px solid rgba(255,255,255,0.08);
+      margin-top: auto;
+    }
+    .sidebar-footer-text { font-size: 11px; color: rgba(255,255,255,0.3); text-align: center; }
+
+    /* Main Content */
+    .admin-content {
+      flex: 1; padding: 24px;
+      overflow-y: auto;
+      min-height: calc(100vh - 64px);
+    }
+
+    /* Page sections */
+    .page-section { display: none; }
+    .page-section.active { display: block; animation: fadeIn 0.3s ease-out; }
+
+    /* Page header */
+    .page-header { margin-bottom: 24px; }
+    .page-title { font-size: 22px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+    .page-subtitle { font-size: 14px; color: #64748b; }
+
+    /* Cards */
+    .card {
+      background: white; border-radius: 16px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .card-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #f1f5f9;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .card-title { font-size: 15px; font-weight: 600; color: #1e293b; }
+    .card-body { padding: 20px; }
+
+    /* Tables */
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th {
+      padding: 12px 16px; text-align: left;
+      font-size: 11px; font-weight: 600;
+      color: #64748b; text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: #f8fafc;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .data-table td { padding: 12px 16px; font-size: 14px; vertical-align: middle; }
+    .data-table tbody tr:nth-child(even) { background: #fafbfc; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: 12px;
+      font-size: 14px; font-weight: 600;
+      cursor: pointer; border: none;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+    .btn-primary { background: #0f4c75; color: white; }
+    .btn-primary:hover { background: #0d3d5e; box-shadow: 0 4px 12px rgba(15,76,117,0.3); }
+    .btn-success { background: #059669; color: white; }
+    .btn-success:hover { background: #047857; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-secondary { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+    .btn-xs { padding: 4px 10px; font-size: 11px; border-radius: 6px; }
+
+    /* Form controls */
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .form-input {
+      width: 100%; padding: 10px 14px;
+      border: 1.5px solid #d1d5db; border-radius: 10px;
+      font-size: 14px; color: #1e293b;
+      transition: all 0.2s;
+      outline: none;
+      font-family: inherit;
+    }
+    .form-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .form-input::placeholder { color: #9ca3af; }
+
+    /* Search & Filter bar */
+    .filter-bar {
+      display: flex; align-items: center; gap: 12px;
+      flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .search-box {
+      flex: 1; min-width: 200px; position: relative;
+    }
+    .search-box i {
+      position: absolute; left: 14px; top: 50%;
+      transform: translateY(-50%);
+      color: #9ca3af; font-size: 14px;
+    }
+    .search-box input {
+      width: 100%; padding: 10px 14px 10px 40px;
+      border: 1.5px solid #e2e8f0; border-radius: 12px;
+      font-size: 14px; outline: none;
+      transition: all 0.2s;
+    }
+    .search-box input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .filter-btn {
+      padding: 8px 16px; border-radius: 10px;
+      border: 1.5px solid #e2e8f0; background: white;
+      font-size: 13px; font-weight: 500; color: #475569;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .filter-btn:hover { border-color: #3b82f6; color: #3b82f6; }
+    .filter-btn.active { background: #0f4c75; color: white; border-color: #0f4c75; }
+
+    /* Stat card grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px; margin-bottom: 24px;
+    }
+
+    /* Dashboard grid */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 20px;
+    }
+
+    /* Quick actions */
+    .quick-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .admin-sidebar { width: 72px; min-width: 72px; }
+      .nav-item span { display: none; }
+      .nav-item { justify-content: center; padding: 12px; }
+      .sidebar-toggle button { display: none; }
+      .sidebar-footer-text { display: none; }
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .admin-content { padding: 16px; }
+    }
+    @media (max-width: 640px) {
+      .admin-header { padding: 0 12px; }
+      .header-brand-sub { display: none; }
+      .header-user-info { display: none; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .filter-bar { flex-direction: column; }
+      .search-box { min-width: 100%; }
+      .data-table { font-size: 12px; }
+      .data-table th, .data-table td { padding: 8px 10px; }
+    }
+
+    /* Skeleton loading */
+    .skeleton {
+      background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+      background-size: 200% 100%;
+      animation: pulse 1.5s ease-in-out infinite;
+      border-radius: 8px;
+    }
+    .skeleton-text { height: 14px; margin-bottom: 8px; }
+    .skeleton-title { height: 20px; width: 60%; margin-bottom: 12px; }
+    .skeleton-card { height: 120px; border-radius: 16px; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* Notification badge */
+    .notif-badge {
+      position: relative;
+    }
+    .notif-badge::after {
+      content: '';
+      position: absolute;
+      top: -2px; right: -2px;
+      width: 10px; height: 10px;
+      background: #ef4444;
+      border-radius: 50%;
+      border: 2px solid white;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center; padding: 48px 24px;
+    }
+    .empty-state i { font-size: 48px; color: #cbd5e1; margin-bottom: 16px; }
+    .empty-state h3 { font-size: 16px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+    .empty-state p { font-size: 13px; color: #94a3b8; }
+
+    /* Back to school link */
+    .back-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; color: #64748b; text-decoration: none;
+      padding: 6px 12px; border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .back-link:hover { background: #f1f5f9; color: #334155; }
+  </style>
 </head>
-<body class="bg-slate-50 text-slate-800 h-screen flex overflow-hidden">
+<body>
 
-    <!-- Toast Container -->
-    <div id="toastContainer" class="fixed top-4 right-4 z-[200] space-y-2"></div>
+  <!-- ==========================================
+       GLOBAL LOADING
+       ========================================== -->
+  <div id="globalLoading" class="hidden">
+    <div class="loading-spinner"></div>
+    <div class="loading-message">Memuat...</div>
+  </div>
 
-    <!-- ===== SIDEBAR ===== -->
-    <aside id="sidebar" class="w-72 bg-gradient-to-b from-slate-900 via-violet-950 to-slate-900 text-white flex flex-col hidden z-50 no-print shadow-2xl">
-        <!-- Logo Area -->
-        <div class="p-6 text-center border-b border-white/10 pt-8 pb-6">
-            <div class="relative inline-block">
-                <div class="w-20 h-20 rounded-2xl mx-auto mb-3 bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg pulse-glow">
-                    <i class="fa-solid fa-shield-halved text-4xl text-white"></i>
-                </div>
-            </div>
-            <h2 class="text-base font-extrabold uppercase tracking-widest bg-gradient-to-r from-violet-300 to-purple-300 bg-clip-text text-transparent">MASTER ADMIN</h2>
-            <span class="text-[10px] mt-2 px-3 py-1 rounded-full inline-block font-bold tracking-wider uppercase bg-violet-600 text-white">Developer Panel</span>
+  <!-- ==========================================
+       LOGIN PAGE
+       ========================================== -->
+  <div id="loginPage" class="login-page">
+    <div class="login-card animate-fade-in">
+      <div class="login-logo">🛡️</div>
+      <h1 class="login-title">Master Admin Panel</h1>
+      <p class="login-subtitle">Smart Absen Enterprise v2.0</p>
+
+      <div style="margin-bottom: 24px;">
+        <div style="display:flex; align-items:center; gap:10px; padding:12px 16px; background:#f0f9ff; border-radius:12px; margin-bottom:16px; text-align:left;">
+          <i class="fa-solid fa-shield-halved" style="color:#3b82f6; font-size:20px;"></i>
+          <div>
+            <p style="font-size:12px; font-weight:600; color:#1e40af;">Akses Terbatas</p>
+            <p style="font-size:11px; color:#64748b;">Hanya akun Master Admin yang dapat masuk</p>
+          </div>
         </div>
-        
-        <!-- Navigation -->
-        <nav class="flex-1 p-3 overflow-y-auto hide-scroll">
-            <p class="text-[10px] uppercase tracking-widest text-slate-500 font-bold px-4 mb-2 mt-2">Menu Panel</p>
-            <ul class="space-y-1" id="navMenu">
-                <li><a href="#" onclick="showPage('dashboard-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="dashboard-page"><i class="fa-solid fa-chart-line w-6 text-center mr-3 text-base"></i>Dashboard</a></li>
-                <li><a href="#" onclick="showPage('registrations-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="registrations-page"><i class="fa-solid fa-user-plus w-6 text-center mr-3 text-base"></i>Registrasi Admin<span id="pendingBadge" class="hidden ml-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full badge-pulse">0</span></a></li>
-                <li><a href="#" onclick="showPage('schools-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="schools-page"><i class="fa-solid fa-school w-6 text-center mr-3 text-base"></i>Kelola Sekolah</a></li>
-                <li><a href="#" onclick="showPage('wa-api-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="wa-api-page"><i class="fa-brands fa-whatsapp w-6 text-center mr-3 text-base"></i>WhatsApp API</a></li>
-                <li><a href="#" onclick="showPage('firebase-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="firebase-page"><i class="fa-solid fa-database w-6 text-center mr-3 text-base"></i>Firebase Config</a></li>
-                <li><a href="#" onclick="showPage('appconfig-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="appconfig-page"><i class="fa-solid fa-gear w-6 text-center mr-3 text-base"></i>Pengaturan App</a></li>
-                <li><a href="#" onclick="showPage('activity-page');return false;" class="sidebar-link flex items-center px-4 py-3 rounded-xl text-slate-400 text-sm font-medium transition" data-page="activity-page"><i class="fa-solid fa-clock-rotate-left w-6 text-center mr-3 text-base"></i>Riwayat Aktivitas</a></li>
-            </ul>
+      </div>
+
+      <button id="btnGoogleSignIn" class="btn-google" onclick="handleGoogleSignIn()">
+        <svg width="20" height="20" viewBox="0 0 24 24">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+        </svg>
+        Masuk dengan Google
+      </button>
+
+      <div id="loginError" style="display:none; margin-top:16px; padding:12px; background:#fef2f2; border:1px solid #fecaca; border-radius:10px; color:#dc2626; font-size:13px;">
+        <i class="fa-solid fa-circle-xmark mr-1"></i>
+        <span id="loginErrorMessage"></span>
+      </div>
+
+      <div class="login-footer">
+        <p>&copy; 2025 Smart Absen Enterprise</p>
+        <p style="margin-top:4px;">
+          <a href="index.html" class="back-link">
+            <i class="fa-solid fa-arrow-left"></i> Kembali ke Aplikasi Sekolah
+          </a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       ADMIN PANEL
+       ========================================== -->
+  <div id="adminPanel" class="admin-panel">
+
+    <!-- HEADER -->
+    <header class="admin-header">
+      <div class="header-left">
+        <div class="header-logo">SA</div>
+        <div class="header-brand">
+          <div class="header-brand-name">Smart Absen Enterprise</div>
+          <div class="header-brand-sub">Master Admin Panel</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <a href="index.html" class="back-link" title="Kembali ke Aplikasi Sekolah">
+          <i class="fa-solid fa-school"></i>
+          <span class="hidden sm:inline">Aplikasi Sekolah</span>
+        </a>
+        <div class="header-divider"></div>
+        <button class="header-btn" id="btnRefresh" onclick="handleRefresh()" title="Segarkan Data">
+          <i class="fa-solid fa-arrows-rotate"></i>
+        </button>
+        <button class="header-btn" id="btnNotification" title="Notifikasi">
+          <i class="fa-solid fa-bell"></i>
+        </button>
+        <div class="header-divider"></div>
+        <div class="header-user">
+          <div class="header-avatar" id="headerUserAvatar">A</div>
+          <img id="headerUserPhoto" class="hidden" alt="Photo">
+          <div class="header-user-info">
+            <div class="header-user-name" id="headerUserName">Admin</div>
+            <div class="header-user-role" id="headerUserEmail">admin@example.com</div>
+          </div>
+        </div>
+        <div class="header-divider"></div>
+        <button class="btn-logout" onclick="handleLogout()">
+          <i class="fa-solid fa-right-from-bracket"></i>
+          <span class="hidden sm:inline">Keluar</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- BODY -->
+    <div class="admin-body">
+
+      <!-- SIDEBAR -->
+      <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-toggle">
+          <button onclick="toggleSidebar()" title="Toggle Sidebar">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard')">
+            <i class="fa-solid fa-chart-pie"></i>
+            <span>Dashboard</span>
+          </a>
+          <a class="nav-item" data-page="schools" onclick="navigateTo('schools')">
+            <i class="fa-solid fa-school"></i>
+            <span>Data Sekolah</span>
+          </a>
+          <a class="nav-item" data-page="statistics" onclick="navigateTo('statistics')">
+            <i class="fa-solid fa-chart-bar"></i>
+            <span>Statistik</span>
+          </a>
+          <a class="nav-item" data-page="config" onclick="navigateTo('config')">
+            <i class="fa-solid fa-gear"></i>
+            <span>Konfigurasi</span>
+          </a>
+          <a class="nav-item" data-page="notifications" onclick="navigateTo('notifications')">
+            <i class="fa-solid fa-bell"></i>
+            <span>Notifikasi</span>
+          </a>
+          <div style="margin-top:auto; padding-top:20px; border-top:1px solid rgba(255,255,255,0.08);"></div>
+          <a class="nav-item" onclick="handleLogout()" style="color:rgba(255,255,255,0.4);">
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span>Logout</span>
+          </a>
         </nav>
-        
-        <!-- User Info & Logout -->
-        <div class="p-4 border-t border-white/10">
-            <div class="flex items-center gap-3 mb-3 px-2">
-                <div class="w-9 h-9 rounded-full bg-violet-700 flex items-center justify-center text-sm font-bold">
-                    <i class="fa-solid fa-crown"></i>
-                </div>
-                <div>
-                    <p class="text-sm font-semibold text-white">Super Admin</p>
-                    <p class="text-[10px] text-slate-400">Master Developer</p>
-                </div>
-            </div>
-            <button onclick="doLogout()" class="w-full flex items-center justify-center p-2.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition text-sm font-semibold">
-                <i class="fa-solid fa-right-from-bracket mr-2"></i> Keluar Sistem
+        <div class="sidebar-footer">
+          <div class="sidebar-footer-text">Smart Absen Enterprise v2.0</div>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT -->
+      <main class="admin-content">
+
+        <!-- ==========================================
+             DASHBOARD PAGE
+             ========================================== -->
+        <div id="page-dashboard" class="page-section active">
+          <div class="page-header">
+            <h1 class="page-title">Dashboard</h1>
+            <p class="page-subtitle">Ringkasan data seluruh sekolah terdaftar</p>
+          </div>
+
+          <!-- Stats Cards -->
+          <div class="stats-grid" id="statsContainer">
+            <!-- Rendered by JS -->
+            <div class="card"><div class="card-body"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:40%"></div></div></div>
+            <div class="card"><div class="card-body"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:40%"></div></div></div>
+            <div class="card"><div class="card-body"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:40%"></div></div></div>
+            <div class="card"><div class="card-body"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:40%"></div></div></div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="quick-actions">
+            <button class="btn btn-primary" onclick="openAddSchoolModal()">
+              <i class="fa-solid fa-plus"></i> Tambah Sekolah
             </button>
-        </div>
-    </aside>
+            <button class="btn btn-secondary" onclick="navigateTo('schools')">
+              <i class="fa-solid fa-list"></i> Lihat Semua Sekolah
+            </button>
+            <button class="btn btn-secondary" onclick="exportSchoolsList(masterAdmin.filteredSchools)">
+              <i class="fa-solid fa-file-export"></i> Ekspor Data
+            </button>
+          </div>
 
-    <!-- ===== MAIN CONTENT ===== -->
-    <main class="flex-1 relative h-full bg-gradient-to-br from-slate-50 via-white to-violet-50/30 overflow-y-auto custom-scroll">
-
-        <!-- ====== LOGIN PAGE ====== -->
-        <div id="login-page" class="flex items-center justify-center h-full relative">
-            <div class="absolute inset-0 bg-gradient-to-br from-slate-900 via-violet-950 to-slate-900"></div>
-            
-            <!-- Decorative circles -->
-            <div class="absolute top-20 left-20 w-72 h-72 bg-violet-500/20 rounded-full blur-3xl"></div>
-            <div class="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
-            
-            <div class="glass-card p-10 rounded-3xl w-full max-w-md shadow-2xl relative z-10 text-white border border-white/15 fade-in">
-                <div class="text-center mb-8">
-                    <div class="w-20 h-20 bg-gradient-to-br from-violet-500 to-purple-700 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-xl pulse-glow">
-                        <i class="fa-solid fa-shield-halved text-4xl text-white"></i>
-                    </div>
-                    <h2 class="text-3xl font-black tracking-tight">Master Admin</h2>
-                    <p class="text-sm text-slate-300 mt-1">Smart Absen Enterprise — Developer Panel</p>
-                </div>
-                
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wider">Super Admin Key</label>
-                        <div class="relative">
-                            <i class="fa-solid fa-key absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                            <input type="password" id="masterPassword" placeholder="Masukkan Super Admin Key..." class="w-full p-4 pl-12 rounded-xl bg-white/5 border border-white/15 text-white placeholder-slate-500 focus:ring-2 focus:ring-violet-400 focus:border-violet-400 transition">
-                        </div>
-                    </div>
-                    <button id="btnMasterLogin" class="w-full p-4 bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-500 hover:to-purple-600 rounded-xl font-bold transition shadow-lg text-base">
-                        <i class="fa-solid fa-lock-open mr-2"></i> Masuk Panel
-                    </button>
-                </div>
-
-                <!-- Firebase Status -->
-                <div id="loginFbStatus" class="mt-4 flex items-center justify-center gap-2 text-xs">
-                    <div id="loginFbDot" class="w-2 h-2 rounded-full bg-slate-500"></div>
-                    <span id="loginFbText" class="text-slate-400">Memeriksa Firebase...</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- ====== DASHBOARD PAGE ====== -->
-        <div id="dashboard-page" class="hidden p-6 lg:p-8 pt-6 h-full fade-in">
-            <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
-                <div>
-                    <h1 class="text-2xl lg:text-3xl font-black text-slate-800">Dashboard Master Admin</h1>
-                    <p class="text-slate-500 text-sm mt-1" id="dashDate"></p>
-                </div>
-                <div class="flex gap-2 flex-wrap">
-                    <button onclick="refreshAllData()" class="btn-primary text-white px-4 py-2.5 rounded-xl font-semibold shadow text-sm flex items-center">
-                        <i class="fa-solid fa-rotate mr-2"></i> Refresh Data
-                    </button>
-                    <a href="./index.html" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-semibold shadow-sm text-sm flex items-center transition">
-                        <i class="fa-solid fa-arrow-left mr-2"></i> Ke Aplikasi Sekolah
-                    </a>
-                </div>
-            </div>
-            
-            <!-- Stat Cards -->
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div class="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:border-violet-200">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center"><i class="fa-solid fa-school text-violet-600"></i></div>
-                    </div>
-                    <h3 class="text-2xl font-black text-slate-800" id="statTotalSchools">0</h3>
-                    <p class="text-xs text-slate-500 font-semibold">Total Sekolah</p>
-                </div>
-                <div class="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:border-green-200">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center"><i class="fa-solid fa-circle-check text-green-600"></i></div>
-                    </div>
-                    <h3 class="text-2xl font-black text-slate-800" id="statActiveSchools">0</h3>
-                    <p class="text-xs text-slate-500 font-semibold">Sekolah Aktif</p>
-                </div>
-                <div class="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:border-amber-200">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center"><i class="fa-solid fa-hourglass-half text-amber-600"></i></div>
-                    </div>
-                    <h3 class="text-2xl font-black text-slate-800" id="statPendingRegs">0</h3>
-                    <p class="text-xs text-slate-500 font-semibold">Registrasi Pending</p>
-                </div>
-                <div class="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:border-rose-200">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center"><i class="fa-solid fa-ban text-rose-600"></i></div>
-                    </div>
-                    <h3 class="text-2xl font-black text-slate-800" id="statRejectedRegs">0</h3>
-                    <p class="text-xs text-slate-500 font-semibold">Registrasi Ditolak</p>
-                </div>
+          <!-- Dashboard Grid -->
+          <div class="dashboard-grid">
+            <!-- Recent Registrations -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left mr-2 text-blue-500"></i>Pendaftaran Terbaru</h3>
+                <button class="btn btn-xs btn-secondary" onclick="navigateTo('schools')">Lihat Semua</button>
+              </div>
+              <div class="card-body" style="padding:0;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Sekolah</th>
+                      <th>Status</th>
+                      <th>Tanggal</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="recentRegistrations">
+                    <tr><td colspan="4" class="text-center py-8 text-slate-400"><div class="skeleton skeleton-text" style="width:50%; margin:0 auto;"></div></td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            <!-- Firebase & System Status -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-                <div class="bg-gradient-to-br from-violet-600 to-purple-700 text-white p-5 rounded-2xl shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-xs font-semibold text-violet-100 uppercase tracking-wider">Status Firebase</p>
-                            <h3 class="text-2xl font-black mt-1" id="dashFbStatus">Memeriksa...</h3>
-                        </div>
-                        <div class="w-14 h-14 bg-white/15 rounded-2xl flex items-center justify-center">
-                            <i class="fa-solid fa-database text-2xl"></i>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-gradient-to-br from-emerald-600 to-green-700 text-white p-5 rounded-2xl shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-xs font-semibold text-emerald-100 uppercase tracking-wider">Total Registrasi</p>
-                            <h3 class="text-2xl font-black mt-1" id="statTotalRegs">0</h3>
-                        </div>
-                        <div class="w-14 h-14 bg-white/15 rounded-2xl flex items-center justify-center">
-                            <i class="fa-solid fa-clipboard-list text-2xl"></i>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-gradient-to-br from-slate-700 to-slate-800 text-white p-5 rounded-2xl shadow-sm">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Mode Aplikasi</p>
-                            <h3 class="text-2xl font-black mt-1" id="dashAppMode">-</h3>
-                        </div>
-                        <div class="w-14 h-14 bg-white/15 rounded-2xl flex items-center justify-center">
-                            <i class="fa-solid fa-toggle-on text-2xl"></i>
-                        </div>
-                    </div>
-                </div>
+            <!-- Activity Feed -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fa-solid fa-bolt mr-2 text-amber-500"></i>Aktivitas Terkini</h3>
+              </div>
+              <div class="card-body" id="activityFeed">
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text" style="width:70%"></div>
+                <div class="skeleton skeleton-text" style="width:85%"></div>
+                <div class="skeleton skeleton-text" style="width:60%"></div>
+              </div>
             </div>
-
-            <!-- Recent Registrations Table -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div class="p-5 border-b border-slate-100 flex items-center justify-between">
-                    <h3 class="font-bold text-slate-700"><i class="fa-solid fa-clock-rotate-left mr-2 text-violet-500"></i>Registrasi Terbaru</h3>
-                    <button onclick="showPage('registrations-page')" class="text-xs text-violet-600 hover:text-violet-800 font-semibold">Lihat Semua <i class="fa-solid fa-arrow-right ml-1"></i></button>
-                </div>
-                <div class="overflow-x-auto max-h-80 overflow-y-auto custom-scroll">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-500 sticky top-0">
-                            <tr class="text-xs uppercase tracking-wider">
-                                <th class="p-4 font-semibold">Tanggal</th>
-                                <th class="p-4 font-semibold">Nama Admin</th>
-                                <th class="p-4 font-semibold">Sekolah</th>
-                                <th class="p-4 font-semibold">NIP</th>
-                                <th class="p-4 font-semibold">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="recentRegsTable" class="text-sm text-slate-700"></tbody>
-                    </table>
-                </div>
-                <div id="emptyRecentRegs" class="hidden p-8 text-center">
-                    <i class="fa-solid fa-inbox text-3xl text-slate-300 mb-2"></i>
-                    <p class="text-slate-400 text-sm">Belum ada registrasi</p>
-                </div>
-            </div>
+          </div>
         </div>
 
-        <!-- ====== REGISTRATIONS PAGE ====== -->
-        <div id="registrations-page" class="hidden p-6 lg:p-8 pt-6 h-full fade-in">
-            <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
-                <div>
-                    <h1 class="text-2xl lg:text-3xl font-black text-slate-800">Registrasi Admin Sekolah</h1>
-                    <p class="text-slate-500 text-sm mt-1">Kelola pendaftaran admin sekolah baru</p>
-                </div>
+        <!-- ==========================================
+             DATA SEKOLAH PAGE
+             ========================================== -->
+        <div id="page-schools" class="page-section">
+          <div class="page-header" style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+            <div>
+              <h1 class="page-title">Data Sekolah</h1>
+              <p class="page-subtitle">Kelola semua sekolah terdaftar di sistem · <span id="schoolsCount" style="font-weight:600;">0 sekolah</span></p>
             </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-secondary btn-sm" onclick="exportSchoolsList(masterAdmin.filteredSchools)">
+                <i class="fa-solid fa-file-csv"></i> Ekspor CSV
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="openAddSchoolModal()">
+                <i class="fa-solid fa-plus"></i> Tambah Sekolah
+              </button>
+            </div>
+          </div>
 
-            <!-- Filter Tabs -->
-            <div class="flex gap-2 mb-6 flex-wrap">
-                <button onclick="filterRegistrations('all')" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white shadow" data-filter="all">
-                    Semua <span id="countAll" class="ml-1 opacity-70">0</span>
-                </button>
-                <button onclick="filterRegistrations('pending')" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-white text-slate-600 border border-slate-200" data-filter="pending">
-                    <i class="fa-solid fa-hourglass-half mr-1 text-amber-500"></i> Pending <span id="countPending" class="ml-1 opacity-70">0</span>
-                </button>
-                <button onclick="filterRegistrations('approved')" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-white text-slate-600 border border-slate-200" data-filter="approved">
-                    <i class="fa-solid fa-check-circle mr-1 text-green-500"></i> Disetujui <span id="countApproved" class="ml-1 opacity-70">0</span>
-                </button>
-                <button onclick="filterRegistrations('rejected')" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-white text-slate-600 border border-slate-200" data-filter="rejected">
-                    <i class="fa-solid fa-times-circle mr-1 text-red-500"></i> Ditolak <span id="countRejected" class="ml-1 opacity-70">0</span>
-                </button>
+          <!-- Filters -->
+          <div class="filter-bar">
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="searchSchoolInput" placeholder="Cari nama sekolah, email, alamat..." oninput="handleSearch(this.value)">
             </div>
+            <button class="filter-btn active" data-filter="all" onclick="handleFilter('all')">Semua</button>
+            <button class="filter-btn" data-filter="active" onclick="handleFilter('active')">
+              <i class="fa-solid fa-circle text-emerald-500 text-xs mr-1"></i> Aktif
+            </button>
+            <button class="filter-btn" data-filter="inactive" onclick="handleFilter('inactive')">
+              <i class="fa-solid fa-circle text-red-400 text-xs mr-1"></i> Nonaktif
+            </button>
+            <select class="form-input" style="width:auto; min-width:160px;" onchange="handleSort(this.value)">
+              <option value="schoolName-asc">Nama (A-Z)</option>
+              <option value="schoolName-desc">Nama (Z-A)</option>
+              <option value="createdAt-desc">Terbaru</option>
+              <option value="createdAt-asc">Terlama</option>
+              <option value="totalStudents-desc">Siswa Terbanyak</option>
+              <option value="totalStudents-asc">Siswa Tersedikit</option>
+            </select>
+          </div>
 
-            <!-- Search -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
-                <div class="relative">
-                    <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-                    <input type="text" id="searchRegistrations" oninput="renderRegistrationsTable()" placeholder="Cari nama, sekolah, atau NIP..." class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm input-modern">
-                </div>
+          <!-- Schools Table -->
+          <div class="card">
+            <div class="card-body" style="padding:0; overflow-x:auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Sekolah</th>
+                    <th>Alamat</th>
+                    <th>Status</th>
+                    <th style="text-align:center;">Siswa</th>
+                    <th style="text-align:center;">Guru</th>
+                    <th style="text-align:center;">Kelas</th>
+                    <th>Tgl Daftar</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="schoolsTableBody">
+                  <tr>
+                    <td colspan="8">
+                      <div class="empty-state">
+                        <i class="fa-solid fa-spinner fa-spin" style="color:#3b82f6;"></i>
+                        <p>Memuat data sekolah...</p>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-
-            <!-- Registrations Table -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-500">
-                            <tr class="text-xs uppercase tracking-wider">
-                                <th class="p-4 font-semibold">Tanggal</th>
-                                <th class="p-4 font-semibold">Nama Admin</th>
-                                <th class="p-4 font-semibold">NIP</th>
-                                <th class="p-4 font-semibold">Nama Sekolah</th>
-                                <th class="p-4 font-semibold">Telepon</th>
-                                <th class="p-4 font-semibold">Status</th>
-                                <th class="p-4 font-semibold text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody id="registrationsTableBody" class="text-sm text-slate-700"></tbody>
-                    </table>
-                </div>
-                <div id="emptyRegistrations" class="hidden p-12 text-center">
-                    <i class="fa-solid fa-user-plus text-4xl text-slate-300 mb-3"></i>
-                    <p class="text-slate-400 font-semibold">Tidak ada registrasi</p>
-                </div>
-            </div>
+          </div>
         </div>
 
-        <!-- ====== SCHOOLS PAGE ====== -->
-        <div id="schools-page" class="hidden p-6 lg:p-8 pt-6 h-full fade-in">
-            <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
-                <div>
-                    <h1 class="text-2xl lg:text-3xl font-black text-slate-800">Kelola Sekolah</h1>
-                    <p class="text-slate-500 text-sm mt-1">Konfigurasi GAS URL, Sheet URL, dan status sekolah</p>
-                </div>
-                <button onclick="refreshSchools()" class="btn-primary text-white px-4 py-2.5 rounded-xl font-semibold shadow text-sm flex items-center">
-                    <i class="fa-solid fa-rotate mr-2"></i> Refresh
-                </button>
+        <!-- ==========================================
+             STATISTIK PAGE
+             ========================================== -->
+        <div id="page-statistics" class="page-section">
+          <div class="page-header">
+            <h1 class="page-title">Statistik</h1>
+            <p class="page-subtitle">Analisis data keseluruhan sistem</p>
+          </div>
+
+          <!-- Stats Grid -->
+          <div class="stats-grid" id="statsPageContainer" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+          </div>
+
+          <!-- Charts Row -->
+          <div class="dashboard-grid" style="margin-bottom:24px;">
+            <!-- Distribution -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fa-solid fa-chart-bar mr-2 text-blue-500"></i>Distribusi Sekolah</h3>
+              </div>
+              <div class="card-body" id="schoolsDistribution">
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text" style="width:70%"></div>
+                <div class="skeleton skeleton-text" style="width:50%"></div>
+              </div>
             </div>
 
-            <!-- Search & Filter -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4 flex flex-wrap gap-3 items-center">
-                <div class="flex-1 min-w-[200px]">
-                    <div class="relative">
-                        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-                        <input type="text" id="searchSchools" oninput="renderSchoolsTable()" placeholder="Cari sekolah atau admin..." class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm input-modern">
-                    </div>
+            <!-- Performance Lists -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><i class="fa-solid fa-ranking-star mr-2 text-amber-500"></i>Peringkat Sekolah</h3>
+              </div>
+              <div class="card-body">
+                <h5 style="font-size:13px; font-weight:600; color:#374151; margin-bottom:12px;">
+                  <i class="fa-solid fa-trophy text-amber-500 mr-1"></i> Sekolah Terbesar
+                </h5>
+                <div id="topPerformingSchools">
+                  <div class="skeleton skeleton-text"></div>
+                  <div class="skeleton skeleton-text" style="width:70%"></div>
                 </div>
-                <select id="filterSchoolStatus" onchange="renderSchoolsTable()" class="px-3 py-2.5 rounded-xl border border-slate-200 text-sm input-modern">
-                    <option value="">Semua Status</option>
-                    <option value="active">Aktif</option>
-                    <option value="inactive">Non-Aktif</option>
-                </select>
+                <hr style="border-color:#f1f5f9; margin:16px 0;">
+                <h5 style="font-size:13px; font-weight:600; color:#374151; margin-bottom:12px;">
+                  <i class="fa-solid fa-exclamation-circle text-red-400 mr-1"></i> Perlu Perhatian
+                </h5>
+                <div id="attentionNeededSchools">
+                  <div class="skeleton skeleton-text"></div>
+                  <div class="skeleton skeleton-text" style="width:70%"></div>
+                </div>
+              </div>
             </div>
+          </div>
 
-            <!-- Schools Table -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-500">
-                            <tr class="text-xs uppercase tracking-wider">
-                                <th class="p-4 font-semibold">#</th>
-                                <th class="p-4 font-semibold">Sekolah</th>
-                                <th class="p-4 font-semibold">Admin</th>
-                                <th class="p-4 font-semibold">NIP</th>
-                                <th class="p-4 font-semibold">GAS URL</th>
-                                <th class="p-4 font-semibold">Sheet URL</th>
-                                <th class="p-4 font-semibold">Status</th>
-                                <th class="p-4 font-semibold text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody id="schoolsTableBody" class="text-sm text-slate-700"></tbody>
-                    </table>
-                </div>
-                <div id="emptySchools" class="hidden p-12 text-center">
-                    <i class="fa-solid fa-school text-4xl text-slate-300 mb-3"></i>
-                    <p class="text-slate-400 font-semibold">Belum ada sekolah terdaftar</p>
-                </div>
+          <!-- All Schools Table for Stats -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="fa-solid fa-list-ol mr-2 text-purple-500"></i>Ringkasan Per Sekolah</h3>
             </div>
+            <div class="card-body" style="padding:0; overflow-x:auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Nama Sekolah</th>
+                    <th>Status</th>
+                    <th style="text-align:center;">Siswa</th>
+                    <th style="text-align:center;">Guru</th>
+                    <th style="text-align:center;">Kelas</th>
+                    <th>Tahun Ajaran</th>
+                    <th>WA</th>
+                  </tr>
+                </thead>
+                <tbody id="statsSchoolsTable">
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
-        <!-- ====== WHATSAPP API PAGE ====== -->
-        <div id="wa-api-page" class="hidden p-6 lg:p-8 pt-6 h-full fade-in">
-            <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
-                <div>
-                    <h1 class="text-2xl lg:text-3xl font-black text-slate-800"><i class="fa-brands fa-whatsapp text-green-600 mr-2"></i>WhatsApp API Management</h1>
-                    <p class="text-slate-500 text-sm mt-1">Atur API WhatsApp otomatis per sekolah untuk notifikasi absensi</p>
-                </div>
-                <div class="flex gap-2 flex-wrap">
-                    <button onclick="renderWaApiPage()" class="btn-primary text-white px-4 py-2.5 rounded-xl font-semibold shadow text-sm flex items-center">
-                        <i class="fa-solid fa-rotate mr-2"></i> Refresh
-                    </button>
-                </div>
-            </div>
+        <!-- ==========================================
+             KONFIGURASI PAGE
+             ========================================== -->
+        <div id="page-config" class="page-section">
+          <div class="page-header">
+            <h1 class="page-title">Konfigurasi</h1>
+            <p class="page-subtitle">Pengaturan sistem dan status koneksi</p>
+          </div>
 
-            <!-- Info Box -->
-            <div class="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6 flex items-start gap-4">
-                <div class="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <i class="fa-brands fa-whatsapp text-green-600 text-lg"></i>
-                </div>
-                <div>
-                    <h3 class="font-bold text-green-800">Cara Kerja WhatsApp API</h3>
-                    <p class="text-sm text-green-700 mt-1">Setiap sekolah mendapatkan API WhatsApp sendiri. Saat siswa absen, sistem otomatis mengirim notifikasi ke orang tua. Anda (sebagai pemilik aplikasi) yang mengatur API key-nya dari sini. Mendukung: <strong>Fonnte, Wablas, Zenziva, Twilio</strong>, dan API WhatsApp lainnya.</p>
-                </div>
-            </div>
-
-            <!-- WA Stats -->
-            <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                <div class="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center"><i class="fa-brands fa-whatsapp text-green-600"></i></div>
-                    </div>
-                    <h3 class="text-2xl font-black text-slate-800" id="statWaConnected">0</h3>
-                    <p class="text-xs text-slate-500 font-semibold">Sekolah WA Aktif</p>
-                </div>
-                <div class="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center"><i class="fa-solid fa-plug text-slate-400"></i></div>
-                    </div>
-                    <h3 class="text-2xl font-black text-slate-800" id="statWaDisconnected">0</h3>
-                    <p class="text-xs text-slate-500 font-semibold">Belum Terhubung</p>
-                </div>
-                <div class="stat-card bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center"><i class="fa-solid fa-paper-plane text-blue-600"></i></div>
-                    </div>
-                    <h3 class="text-2xl font-black text-slate-800" id="statWaTotal">0</h3>
-                    <p class="text-xs text-slate-500 font-semibold">Total Sekolah</p>
-                </div>
-            </div>
-
-            <!-- Search -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
-                <div class="relative">
-                    <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-                    <input type="text" id="searchWaApi" oninput="renderWaApiPage()" placeholder="Cari sekolah..." class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm input-modern">
-                </div>
-            </div>
-
-            <!-- WA API Cards -->
-            <div id="waApiCards" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
-            <div id="emptyWaApi" class="hidden p-12 text-center">
-                <i class="fa-brands fa-whatsapp text-4xl text-slate-300 mb-3"></i>
-                <p class="text-slate-400 font-semibold">Belum ada sekolah terdaftar</p>
-            </div>
+          <div id="configContent">
+            <div class="skeleton skeleton-card"></div>
+          </div>
         </div>
 
-        <!-- ====== FIREBASE CONFIG PAGE ====== -->
-        <div id="firebase-page" class="hidden p-6 lg:p-8 pt-6 h-full fade-in">
-            <div class="mb-6">
-                <h1 class="text-2xl lg:text-3xl font-black text-slate-800">Konfigurasi Firebase</h1>
-                <p class="text-slate-500 text-sm mt-1">Atur koneksi Firebase sebagai "otak" sistem untuk semua sekolah</p>
-            </div>
+        <!-- ==========================================
+             NOTIFIKASI PAGE
+             ========================================== -->
+        <div id="page-notifications" class="page-section">
+          <div class="page-header">
+            <h1 class="page-title">Notifikasi</h1>
+            <p class="page-subtitle">Riwayat aktivitas dan notifikasi sistem</p>
+          </div>
 
-            <!-- Security Warning -->
-            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6 flex items-start gap-4">
-                <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <i class="fa-solid fa-triangle-exclamation text-amber-600"></i>
-                </div>
-                <div>
-                    <h3 class="font-bold text-amber-800">PENTING: Privasi Firebase Config</h3>
-                    <p class="text-sm text-amber-700 mt-1">Konfigurasi Firebase hanya ditampilkan di halaman ini (Master Admin). Admin sekolah <strong>TIDAK</strong> dapat melihat atau mengubah konfigurasi Firebase. Satu instance Firebase digunakan untuk semua sekolah yang terintegrasi.</p>
-                </div>
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left mr-2 text-blue-500"></i>Riwayat Aktivitas</h3>
+              <button class="btn btn-xs btn-secondary" onclick="clearActivityLog()">Hapus Riwayat</button>
             </div>
-
-            <!-- Connection Status -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-6">
-                <h3 class="font-bold text-slate-700 mb-3"><i class="fa-solid fa-signal mr-2 text-violet-500"></i>Status Koneksi</h3>
-                <div class="flex items-center gap-3" id="firebaseConnectionStatus">
-                    <div id="fbConnDot" class="w-3 h-3 rounded-full bg-slate-400"></div>
-                    <span id="fbConnText" class="text-sm text-slate-600">Memeriksa...</span>
-                </div>
+            <div class="card-body" id="fullActivityFeed">
+              <p class="text-slate-400 text-sm text-center py-6">Tidak ada aktivitas</p>
             </div>
-
-            <!-- Firebase Config Form -->
-            <div class="bg-gradient-to-br from-slate-800 via-slate-900 to-violet-950 rounded-2xl shadow-lg p-6 lg:p-8">
-                <div class="flex items-center gap-3 mb-6">
-                    <div class="w-10 h-10 bg-violet-600/30 rounded-xl flex items-center justify-center">
-                        <i class="fa-solid fa-fire text-violet-400"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-white text-lg">Firebase Project Config</h3>
-                        <p class="text-xs text-slate-400">Isi dengan konfigurasi dari Firebase Console → Project Settings → Web App</p>
-                    </div>
-                </div>
-                
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">API Key</label>
-                        <input type="text" id="cfgApiKey" placeholder="AIzaSy..." class="w-full p-3.5 rounded-xl bg-slate-800/50 border border-slate-600/50 text-slate-200 placeholder-slate-500 text-sm config-field">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Auth Domain</label>
-                        <input type="text" id="cfgAuthDomain" placeholder="your-project.firebaseapp.com" class="w-full p-3.5 rounded-xl bg-slate-800/50 border border-slate-600/50 text-slate-200 placeholder-slate-500 text-sm config-field">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Project ID</label>
-                        <input type="text" id="cfgProjectId" placeholder="your-project-id" class="w-full p-3.5 rounded-xl bg-slate-800/50 border border-slate-600/50 text-slate-200 placeholder-slate-500 text-sm config-field">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Storage Bucket</label>
-                        <input type="text" id="cfgStorageBucket" placeholder="your-project.appspot.com" class="w-full p-3.5 rounded-xl bg-slate-800/50 border border-slate-600/50 text-slate-200 placeholder-slate-500 text-sm config-field">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Messaging Sender ID</label>
-                        <input type="text" id="cfgSenderId" placeholder="123456789" class="w-full p-3.5 rounded-xl bg-slate-800/50 border border-slate-600/50 text-slate-200 placeholder-slate-500 text-sm config-field">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">App ID</label>
-                        <input type="text" id="cfgAppId" placeholder="1:123456789:web:abc123" class="w-full p-3.5 rounded-xl bg-slate-800/50 border border-slate-600/50 text-slate-200 placeholder-slate-500 text-sm config-field">
-                    </div>
-                    
-                    <div class="flex gap-3 pt-2">
-                        <button onclick="testFirebaseConnection()" class="btn-secondary text-white px-5 py-3 rounded-xl font-semibold text-sm flex items-center">
-                            <i class="fa-solid fa-plug mr-2"></i> Test Koneksi
-                        </button>
-                        <button onclick="saveFirebaseConfig()" class="btn-primary text-white px-5 py-3 rounded-xl font-semibold text-sm flex items-center">
-                            <i class="fa-solid fa-floppy-disk mr-2"></i> Simpan Konfigurasi
-                        </button>
-                        <button onclick="clearFirebaseConfig()" class="btn-danger text-white px-5 py-3 rounded-xl font-semibold text-sm flex items-center">
-                            <i class="fa-solid fa-trash mr-2"></i> Hapus
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Firestore Collections Info -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mt-6">
-                <h3 class="font-bold text-slate-700 mb-4"><i class="fa-solid fa-folder-tree mr-2 text-violet-500"></i>Struktur Firestore Collections</h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="bg-slate-50 rounded-xl p-4">
-                        <h4 class="font-bold text-sm text-violet-700"><i class="fa-solid fa-user-plus mr-1"></i> registrations</h4>
-                        <p class="text-xs text-slate-500 mt-1">Menyimpan data registrasi admin sekolah baru (pending/approved/rejected)</p>
-                    </div>
-                    <div class="bg-slate-50 rounded-xl p-4">
-                        <h4 class="font-bold text-sm text-violet-700"><i class="fa-solid fa-school mr-1"></i> schools</h4>
-                        <p class="text-xs text-slate-500 mt-1">Data sekolah yang sudah disetujui: nama, NIP admin, GAS URL, Sheet URL, status</p>
-                    </div>
-                    <div class="bg-slate-50 rounded-xl p-4">
-                        <h4 class="font-bold text-sm text-violet-700"><i class="fa-solid fa-gear mr-1"></i> appConfig</h4>
-                        <p class="text-xs text-slate-500 mt-1">Konfigurasi aplikasi global: super admin key, maintenance mode, versi</p>
-                    </div>
-                </div>
-            </div>
+          </div>
         </div>
 
-        <!-- ====== APP CONFIG PAGE ====== -->
-        <div id="appconfig-page" class="hidden p-6 lg:p-8 pt-6 h-full fade-in">
-            <div class="mb-6">
-                <h1 class="text-2xl lg:text-3xl font-black text-slate-800">Pengaturan Aplikasi</h1>
-                <p class="text-slate-500 text-sm mt-1">Konfigurasi global yang berlaku untuk semua sekolah</p>
-            </div>
-
-            <!-- Super Admin Password -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6">
-                <div class="flex items-center gap-3 mb-4">
-                    <div class="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center">
-                        <i class="fa-solid fa-key text-rose-600"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-slate-700">Super Admin Key</h3>
-                        <p class="text-xs text-slate-400">Kunci rahasia untuk mengakses panel Master Admin ini</p>
-                    </div>
-                </div>
-                <div class="space-y-3">
-                    <input type="password" id="cfgSuperAdminKey" placeholder="Super Admin Key..." class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
-                    <button onclick="saveSuperAdminKey()" class="btn-primary text-white px-4 py-2.5 rounded-xl font-semibold shadow text-sm flex items-center">
-                        <i class="fa-solid fa-save mr-2"></i> Simpan Key
-                    </button>
-                </div>
-            </div>
-
-            <!-- Maintenance Mode -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
-                            <i class="fa-solid fa-wrench text-amber-600"></i>
-                        </div>
-                        <div>
-                            <h3 class="font-bold text-slate-700">Maintenance Mode</h3>
-                            <p class="text-xs text-slate-400">Nonaktifkan sementara akses ke aplikasi sekolah</p>
-                        </div>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="cfgMaintenance" class="sr-only peer" onchange="toggleMaintenance()">
-                        <div class="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-amber-500"></div>
-                    </label>
-                </div>
-            </div>
-
-            <!-- App Info -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6">
-                <div class="flex items-center gap-3 mb-4">
-                    <div class="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center">
-                        <i class="fa-solid fa-circle-info text-violet-600"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-slate-700">Informasi Aplikasi</h3>
-                        <p class="text-xs text-slate-400">Detail aplikasi Smart Absen Enterprise</p>
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                        <p class="text-slate-400 text-xs font-semibold">Nama Aplikasi</p>
-                        <p class="font-semibold text-slate-700">Smart Absen Enterprise</p>
-                    </div>
-                    <div>
-                        <p class="text-slate-400 text-xs font-semibold">Versi</p>
-                        <p class="font-semibold text-slate-700">v4.0</p>
-                    </div>
-                    <div>
-                        <p class="text-slate-400 text-xs font-semibold">Arsitektur</p>
-                        <p class="font-semibold text-slate-700">Multi-Tenant (Firebase + GAS)</p>
-                    </div>
-                    <div>
-                        <p class="text-slate-400 text-xs font-semibold">Database</p>
-                        <p class="font-semibold text-slate-700">Google Sheets per Sekolah</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Broadcast Message -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6">
-                <div class="flex items-center gap-3 mb-4">
-                    <div class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-                        <i class="fa-solid fa-bullhorn text-blue-600"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-slate-700">Pesan Broadcast</h3>
-                        <p class="text-xs text-slate-400">Kirim pengumuman ke semua sekolah pengguna</p>
-                    </div>
-                </div>
-                <div class="space-y-3">
-                    <textarea id="cfgBroadcastMsg" rows="3" placeholder="Tulis pesan pengumuman yang akan muncul di aplikasi sekolah..." class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern resize-none"></textarea>
-                    <div class="flex gap-3">
-                        <button onclick="saveBroadcastMessage()" class="btn-primary text-white px-4 py-2.5 rounded-xl font-semibold shadow text-sm flex items-center">
-                            <i class="fa-solid fa-paper-plane mr-2"></i> Kirim Broadcast
-                        </button>
-                        <button onclick="clearBroadcastMessage()" class="btn-danger text-white px-4 py-2.5 rounded-xl font-semibold shadow text-sm flex items-center">
-                            <i class="fa-solid fa-xmark mr-2"></i> Hapus Pesan
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ====== ACTIVITY LOG PAGE ====== -->
-        <div id="activity-page" class="hidden p-6 lg:p-8 pt-6 h-full fade-in">
-            <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
-                <div>
-                    <h1 class="text-2xl lg:text-3xl font-black text-slate-800">Riwayat Aktivitas</h1>
-                    <p class="text-slate-500 text-sm mt-1">Log aktivitas registrasi dan perubahan data sekolah</p>
-                </div>
-                <button onclick="refreshActivityLog()" class="btn-primary text-white px-4 py-2.5 rounded-xl font-semibold shadow text-sm flex items-center">
-                    <i class="fa-solid fa-rotate mr-2"></i> Refresh
-                </button>
-            </div>
-
-            <!-- Activity Log -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div class="overflow-x-auto max-h-[600px] overflow-y-auto custom-scroll">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-500 sticky top-0">
-                            <tr class="text-xs uppercase tracking-wider">
-                                <th class="p-4 font-semibold">Waktu</th>
-                                <th class="p-4 font-semibold">Tipe</th>
-                                <th class="p-4 font-semibold">Detail</th>
-                            </tr>
-                        </thead>
-                        <tbody id="activityLogBody" class="text-sm text-slate-700"></tbody>
-                    </table>
-                </div>
-                <div id="emptyActivityLog" class="hidden p-12 text-center">
-                    <i class="fa-solid fa-clipboard text-4xl text-slate-300 mb-3"></i>
-                    <p class="text-slate-400 font-semibold">Belum ada aktivitas tercatat</p>
-                </div>
-            </div>
-        </div>
-
-    </main>
-
-    <!-- ===== MODAL: Approve Registration ===== -->
-    <div id="modalApprove" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div class="modal-overlay absolute inset-0" onclick="closeModal('modalApprove')"></div>
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md relative z-10 fade-in overflow-hidden">
-            <div class="bg-gradient-to-r from-green-500 to-emerald-600 p-5 text-white">
-                <h3 class="font-bold text-lg"><i class="fa-solid fa-check-circle mr-2"></i>Setujui Registrasi</h3>
-                <p class="text-sm text-green-100 mt-1">Sekolah akan dibuatkan akun dan dapat login</p>
-            </div>
-            <div class="p-6">
-                <div id="approveDetail" class="bg-green-50 rounded-xl p-4 mb-4 text-sm space-y-1"></div>
-                <p class="text-sm text-slate-500 mb-4">Dengan menyetujui, admin sekolah ini akan dapat login ke aplikasi dengan NIP dan password yang terdaftar.</p>
-                <div class="flex gap-3">
-                    <button onclick="closeModal('modalApprove')" class="flex-1 btn-secondary text-white px-4 py-2.5 rounded-xl font-semibold text-sm">Batal</button>
-                    <button id="btnConfirmApprove" class="flex-1 btn-success text-white px-4 py-2.5 rounded-xl font-semibold text-sm">
-                        <i class="fa-solid fa-check mr-1"></i> Setujui
-                    </button>
-                </div>
-            </div>
-        </div>
+      </main>
     </div>
+  </div>
 
-    <!-- ===== MODAL: Reject Registration ===== -->
-    <div id="modalReject" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div class="modal-overlay absolute inset-0" onclick="closeModal('modalReject')"></div>
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md relative z-10 fade-in overflow-hidden">
-            <div class="bg-gradient-to-r from-red-500 to-rose-600 p-5 text-white">
-                <h3 class="font-bold text-lg"><i class="fa-solid fa-times-circle mr-2"></i>Tolak Registrasi</h3>
-                <p class="text-sm text-red-100 mt-1">Berikan alasan penolakan</p>
-            </div>
-            <div class="p-6">
-                <div id="rejectDetail" class="bg-red-50 rounded-xl p-4 mb-4 text-sm space-y-1"></div>
-                <div class="mb-4">
-                    <label class="block text-xs font-semibold text-slate-500 mb-2">Alasan Penolakan</label>
-                    <textarea id="rejectReason" rows="3" placeholder="Contoh: Data tidak lengkap, NIP tidak valid, dll." class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern resize-none"></textarea>
-                </div>
-                <div class="flex gap-3">
-                    <button onclick="closeModal('modalReject')" class="flex-1 btn-secondary text-white px-4 py-2.5 rounded-xl font-semibold text-sm">Batal</button>
-                    <button id="btnConfirmReject" class="flex-1 btn-danger text-white px-4 py-2.5 rounded-xl font-semibold text-sm">
-                        <i class="fa-solid fa-ban mr-1"></i> Tolak
-                    </button>
-                </div>
-            </div>
+  <!-- ==========================================
+       ADD SCHOOL MODAL (Template, shown via JS)
+       ========================================== -->
+
+  <!-- ==========================================
+       SCRIPTS
+       ========================================== -->
+
+  <!-- Config -->
+  <script src="config.js"></script>
+
+  <!-- Firebase SDKs (compat mode) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- Google API -->
+  <script src="https://apis.google.com/js/api.js"></script>
+
+  <!-- Master Admin Service -->
+  <script src="master-admin.js"></script>
+
+  <!-- Inline UI Logic -->
+  <script>
+    // ==========================================
+    // PAGE NAVIGATION
+    // ==========================================
+
+    function navigateTo(page) {
+      // Hide all pages
+      document.querySelectorAll('.page-section').forEach(p => p.classList.remove('active'));
+      // Show target page
+      const target = document.getElementById('page-' + page);
+      if (target) target.classList.add('active');
+
+      // Update sidebar
+      document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+        item.classList.toggle('active', item.dataset.page === page);
+      });
+
+      // Refresh page-specific data
+      if (page === 'dashboard') {
+        renderStatsCards(masterAdmin.stats);
+        renderRecentRegistrations(masterAdmin.filteredSchools);
+        renderActivityFeed(masterAdmin.activityLog.slice(0, 10));
+      }
+      if (page === 'schools') {
+        renderSchoolsTable(masterAdmin.filteredSchools);
+      }
+      if (page === 'statistics') {
+        renderStatsCards(masterAdmin.stats);
+        renderSchoolsDistribution(masterAdmin.filteredSchools);
+        renderPerformanceLists(masterAdmin.filteredSchools);
+        renderStatsSchoolsTable(masterAdmin.filteredSchools);
+      }
+      if (page === 'config') {
+        renderConfigPage();
+      }
+      if (page === 'notifications') {
+        renderFullActivityFeed();
+      }
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('adminSidebar');
+      sidebar.classList.toggle('collapsed');
+    }
+
+    // ==========================================
+    // AUTH HANDLERS
+    // ==========================================
+
+    async function handleGoogleSignIn() {
+      const btn = document.getElementById('btnGoogleSignIn');
+      const errorDiv = document.getElementById('loginError');
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
+      errorDiv.style.display = 'none';
+
+      try {
+        const user = await masterAdmin.signInWithGoogle();
+        if (user) {
+          // Check if master admin
+          const masterEmail = SMART_ABSEN_CONFIG.app.masterAdminEmail;
+          if (user.email.toLowerCase() !== masterEmail.toLowerCase()) {
+            showAccessDenied(user.email, masterEmail);
+            return;
+          }
+          // Continue init
+          await masterAdmin.init();
+        }
+      } catch (error) {
+        errorDiv.style.display = 'block';
+        document.getElementById('loginErrorMessage').textContent = error.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Masuk dengan Google
+        `;
+      }
+    }
+
+    async function handleLogout() {
+      if (!confirm('Yakin ingin keluar dari panel Master Admin?')) return;
+      await masterAdmin.signOut();
+    }
+
+    async function handleRefresh() {
+      const btn = document.getElementById('btnRefresh');
+      btn.classList.add('refreshing');
+      try {
+        await masterAdmin.loadSchools();
+        await masterAdmin.calculateGlobalStats();
+        masterAdmin.refreshUI();
+        showToast('Data berhasil diperbarui');
+      } catch (error) {
+        showToast('Gagal memperbarui: ' + error.message, 'error');
+      } finally {
+        btn.classList.remove('refreshing');
+      }
+    }
+
+    // ==========================================
+    // SEARCH & FILTER HANDLERS
+    // ==========================================
+
+    let searchTimeout = null;
+    function handleSearch(value) {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        masterAdmin.searchSchools(value);
+        renderSchoolsTable(masterAdmin.filteredSchools);
+        document.getElementById('schoolsCount').textContent = masterAdmin.filteredSchools.length + ' sekolah';
+      }, 300);
+    }
+
+    function handleFilter(status) {
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === status);
+      });
+      masterAdmin.filterSchools(status);
+      renderSchoolsTable(masterAdmin.filteredSchools);
+      document.getElementById('schoolsCount').textContent = masterAdmin.filteredSchools.length + ' sekolah';
+    }
+
+    function handleSort(value) {
+      const [field, direction] = value.split('-');
+      masterAdmin.sortSchools(field, direction);
+      renderSchoolsTable(masterAdmin.filteredSchools);
+    }
+
+    // ==========================================
+    // ADD SCHOOL MODAL
+    // ==========================================
+
+    function openAddSchoolModal() {
+      showModal('Tambah Sekolah Baru', `
+        <div class="space-y-4">
+          <div class="form-group">
+            <label class="form-label">Nama Sekolah <span class="text-red-500">*</span></label>
+            <input type="text" id="addSchoolName" class="form-input" placeholder="Contoh: SMA Negeri 1 Jakarta">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email Admin Sekolah <span class="text-red-500">*</span></label>
+            <input type="email" id="addSchoolEmail" class="form-input" placeholder="admin@sekolah.ac.id">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Alamat Sekolah</label>
+            <textarea id="addSchoolAddress" class="form-input" rows="2" placeholder="Jl. Contoh No. 123, Kota"></textarea>
+          </div>
+          <div style="display:flex; gap:8px; justify-content:flex-end; padding-top:8px; border-top:1px solid #f1f5f9;">
+            <button onclick="closeMasterModal()" class="btn btn-secondary btn-sm">Batal</button>
+            <button onclick="submitAddSchool()" class="btn btn-primary btn-sm">
+              <i class="fa-solid fa-plus mr-1"></i> Tambah Sekolah
+            </button>
+          </div>
         </div>
-    </div>
+      `);
+    }
 
-    <!-- ===== MODAL: Edit School Config ===== -->
-    <div id="modalEditSchool" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div class="modal-overlay absolute inset-0" onclick="closeModal('modalEditSchool')"></div>
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg relative z-10 fade-in overflow-hidden max-h-[90vh] overflow-y-auto custom-scroll">
-            <div class="bg-gradient-to-r from-violet-600 to-purple-700 p-5 text-white">
-                <h3 class="font-bold text-lg"><i class="fa-solid fa-school mr-2"></i>Edit Konfigurasi Sekolah</h3>
-                <p class="text-sm text-violet-100 mt-1" id="editSchoolTitle">-</p>
-            </div>
-            <div class="p-6 space-y-4">
-                <input type="hidden" id="editSchoolId">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-2">Nama Sekolah</label>
-                    <input type="text" id="editSchoolNama" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern" readonly>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-2">Nama Admin</label>
-                    <input type="text" id="editSchoolAdmin" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern" readonly>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-2">NIP Admin</label>
-                    <input type="text" id="editSchoolNip" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern" readonly>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-2">Telepon Admin</label>
-                    <input type="text" id="editSchoolTelp" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-2">GAS URL (Google Apps Script)</label>
-                    <input type="text" id="editSchoolGasUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
-                    <p class="text-[10px] text-slate-400 mt-1">URL deploy Google Apps Script sebagai backend database sekolah</p>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-2">Sheet URL (Google Sheets)</label>
-                    <input type="text" id="editSchoolSheetUrl" placeholder="https://docs.google.com/spreadsheets/d/.../edit" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
-                    <p class="text-[10px] text-slate-400 mt-1">URL Google Sheet yang berisi data sekolah (untuk cetak barcode / referensi)</p>
-                </div>
-                <div class="border-t border-slate-200 pt-4 mt-4">
-                    <div class="flex items-center gap-2 mb-3">
-                        <i class="fa-brands fa-whatsapp text-green-600"></i>
-                        <h4 class="font-bold text-sm text-slate-700">WhatsApp API Settings</h4>
-                    </div>
-                    <div class="space-y-3">
-                        <div class="flex items-center justify-between bg-green-50 rounded-xl p-3">
-                            <div>
-                                <p class="text-sm font-semibold text-slate-700">Aktifkan WhatsApp Notifikasi</p>
-                                <p class="text-xs text-slate-400">Kirim otomatis ke orang tua saat absen</p>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="editSchoolWaEnabled" class="sr-only peer">
-                                <div class="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-500"></div>
-                            </label>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-2">Provider API</label>
-                            <select id="editSchoolWaProvider" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
-                                <option value="">-- Pilih Provider --</option>
-                                <option value="fonnte">Fonnte (fonnte.com)</option>
-                                <option value="wablas">Wablas (wablas.com)</option>
-                                <option value="zenziva">Zenziva (zenziva.net)</option>
-                                <option value="twilio">Twilio</option>
-                                <option value="custom">Custom API</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-2">API Key / Token</label>
-                            <input type="text" id="editSchoolWaApiKey" placeholder="API Key dari provider WhatsApp" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
-                            <p class="text-[10px] text-slate-400 mt-1">Key rahasia dari provider WA yang Anda pilih</p>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-2">Nomor Sender / Device</label>
-                            <input type="text" id="editSchoolWaSender" placeholder="6281234567890" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
-                            <p class="text-[10px] text-slate-400 mt-1">Nomor WA pengirim (tanpa +, contoh: 6281234567890)</p>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-2">Custom Webhook URL (opsional)</label>
-                            <input type="text" id="editSchoolWaWebhook" placeholder="https://your-webhook-url.com/send" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
-                            <p class="text-[10px] text-slate-400 mt-1">Jika menggunakan Custom API, isi URL endpoint-nya di sini</p>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-2">Reset Password Admin</label>
-                    <input type="text" id="editSchoolPassword" placeholder="Kosongkan jika tidak ingin mengubah" class="w-full p-3 rounded-xl border border-slate-200 text-sm input-modern">
-                </div>
-                <div class="flex items-center justify-between bg-slate-50 rounded-xl p-3">
-                    <div>
-                        <p class="text-sm font-semibold text-slate-700">Status Sekolah</p>
-                        <p class="text-xs text-slate-400">Nonaktifkan untuk memblokir akses</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="editSchoolActive" class="sr-only peer">
-                        <div class="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-500"></div>
-                    </label>
-                </div>
-                <div class="flex gap-3 pt-2">
-                    <button onclick="closeModal('modalEditSchool')" class="flex-1 btn-secondary text-white px-4 py-2.5 rounded-xl font-semibold text-sm">Batal</button>
-                    <button onclick="saveSchoolConfig()" class="flex-1 btn-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm">
-                        <i class="fa-solid fa-floppy-disk mr-1"></i> Simpan
-                    </button>
-                </div>
-            </div>
+    async function submitAddSchool() {
+      const name = document.getElementById('addSchoolName').value.trim();
+      const email = document.getElementById('addSchoolEmail').value.trim();
+      const address = document.getElementById('addSchoolAddress').value.trim();
+
+      if (!name) { showToast('Nama sekolah wajib diisi', 'error'); return; }
+      if (!email) { showToast('Email wajib diisi', 'error'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('Format email tidak valid', 'error'); return; }
+
+      const success = await masterAdmin.addManualSchool({ schoolName: name, email, address });
+      if (success) {
+        closeMasterModal();
+        // Ask to send invitation
+        if (confirm('Sekolah berhasil ditambahkan!\n\nApakah Anda ingin mengirim undangan pendaftaran ke ' + email + '?')) {
+          masterAdmin.sendSchoolInvitation(email, name);
+        }
+      }
+    }
+
+    // ==========================================
+    // INVITE MODAL
+    // ==========================================
+
+    function openInviteModal() {
+      showModal('Kirim Undangan Sekolah', `
+        <div class="space-y-4">
+          <div class="form-group">
+            <label class="form-label">Email Sekolah</label>
+            <input type="email" id="inviteEmail" class="form-input" placeholder="admin@sekolah.ac.id">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nama Sekolah</label>
+            <input type="text" id="inviteSchoolName" class="form-input" placeholder="Nama Sekolah">
+          </div>
+          <div style="display:flex; gap:8px; justify-content:flex-end; padding-top:8px; border-top:1px solid #f1f5f9;">
+            <button onclick="closeMasterModal()" class="btn btn-secondary btn-sm">Batal</button>
+            <button onclick="submitInvitation()" class="btn btn-primary btn-sm">
+              <i class="fa-solid fa-paper-plane mr-1"></i> Kirim Undangan
+            </button>
+          </div>
         </div>
-    </div>
+      `);
+    }
 
-    <!-- ===== MODAL: Confirm Delete School ===== -->
-    <div id="modalDeleteSchool" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div class="modal-overlay absolute inset-0" onclick="closeModal('modalDeleteSchool')"></div>
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md relative z-10 fade-in overflow-hidden">
-            <div class="bg-gradient-to-r from-red-600 to-rose-700 p-5 text-white">
-                <h3 class="font-bold text-lg"><i class="fa-solid fa-trash mr-2"></i>Hapus Sekolah</h3>
-                <p class="text-sm text-red-100 mt-1">Tindakan ini tidak dapat dibatalkan!</p>
+    async function submitInvitation() {
+      const email = document.getElementById('inviteEmail').value.trim();
+      const schoolName = document.getElementById('inviteSchoolName').value.trim();
+      if (!email || !schoolName) { showToast('Email dan nama sekolah wajib diisi', 'error'); return; }
+      closeMasterModal();
+      await masterAdmin.sendSchoolInvitation(email, schoolName);
+    }
+
+    // ==========================================
+    // STATS PAGE HELPERS
+    // ==========================================
+
+    function renderStatsSchoolsTable(schools) {
+      const container = document.getElementById('statsSchoolsTable');
+      if (!container) return;
+
+      if (!schools || schools.length === 0) {
+        container.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-8 text-slate-400">
+              <p>Tidak ada data</p>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      container.innerHTML = schools.map((school, i) => {
+        const s = school.settings || {};
+        const statusBadge = school.isActive
+          ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold"><span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>Aktif</span>'
+          : '<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-600 rounded-full text-xs font-bold"><span class="w-1.5 h-1.5 bg-red-500 rounded-full"></span>Nonaktif</span>';
+        const waBadge = s.whatsapp_enabled
+          ? '<span class="text-green-500 text-sm"><i class="fa-brands fa-whatsapp"></i></span>'
+          : '<span class="text-slate-300 text-sm"><i class="fa-brands fa-whatsapp"></i></span>';
+
+        return `
+          <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition">
+            <td class="px-4 py-3 text-sm text-slate-500 font-mono">${i + 1}</td>
+            <td class="px-4 py-3">
+              <span class="font-semibold text-sm text-slate-800">${escapeHtml(school.schoolName)}</span>
+              <br><span class="text-xs text-slate-500">${escapeHtml(school.email)}</span>
+            </td>
+            <td class="px-4 py-3">${statusBadge}</td>
+            <td class="px-4 py-3 text-center font-semibold text-sm">${s.total_siswa || 0}</td>
+            <td class="px-4 py-3 text-center font-semibold text-sm">${s.total_guru || 0}</td>
+            <td class="px-4 py-3 text-center font-semibold text-sm">${s.total_kelas || 0}</td>
+            <td class="px-4 py-3 text-sm text-slate-600">${s.tahun_ajaran || '-'}</td>
+            <td class="px-4 py-3 text-center">${waBadge}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // ==========================================
+    // NOTIFICATIONS PAGE
+    // ==========================================
+
+    function renderFullActivityFeed() {
+      const container = document.getElementById('fullActivityFeed');
+      if (!container) return;
+
+      const activities = masterAdmin.activityLog;
+      if (!activities || activities.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <i class="fa-solid fa-bell-slash"></i>
+            <h3>Tidak ada aktivitas</h3>
+            <p>Aktivitas admin akan muncul di sini</p>
+          </div>
+        `;
+        return;
+      }
+
+      const actionIcons = {
+        add: { icon: 'fa-plus-circle', color: 'text-green-500', bg: 'bg-green-50', label: 'Penambahan' },
+        update: { icon: 'fa-pen', color: 'text-blue-500', bg: 'bg-blue-50', label: 'Pembaruan' },
+        delete: { icon: 'fa-trash', color: 'text-red-500', bg: 'bg-red-50', label: 'Penghapusan' },
+        activate: { icon: 'fa-toggle-on', color: 'text-emerald-500', bg: 'bg-emerald-50', label: 'Aktivasi' },
+        deactivate: { icon: 'fa-toggle-off', color: 'text-slate-400', bg: 'bg-slate-50', label: 'Deaktivasi' },
+        reset: { icon: 'fa-rotate', color: 'text-amber-500', bg: 'bg-amber-50', label: 'Reset' },
+        invite: { icon: 'fa-envelope', color: 'text-purple-500', bg: 'bg-purple-50', label: 'Undangan' },
+      };
+
+      container.innerHTML = activities.map((act) => {
+        const cfg = actionIcons[act.action] || { icon: 'fa-circle-info', color: 'text-slate-400', bg: 'bg-slate-50', label: 'Info' };
+        const time = act.timestamp ? formatTime(new Date(act.timestamp)) : '';
+        const date = act.timestamp ? formatDate(new Date(act.timestamp)) : '';
+
+        return `
+          <div class="flex items-start gap-4 py-4 ${activities.indexOf(act) < activities.length - 1 ? 'border-b border-slate-100' : ''}">
+            <div class="w-10 h-10 ${cfg.bg} rounded-xl flex items-center justify-center flex-shrink-0">
+              <i class="fa-solid ${cfg.icon} ${cfg.color}"></i>
             </div>
-            <div class="p-6">
-                <div id="deleteSchoolDetail" class="bg-red-50 rounded-xl p-4 mb-4 text-sm"></div>
-                <p class="text-sm text-slate-600 mb-4">Semua data sekolah ini akan dihapus dari sistem Firebase. Pastikan Anda sudah membackup data yang diperlukan.</p>
-                <div class="flex gap-3">
-                    <button onclick="closeModal('modalDeleteSchool')" class="flex-1 btn-secondary text-white px-4 py-2.5 rounded-xl font-semibold text-sm">Batal</button>
-                    <button id="btnConfirmDeleteSchool" class="flex-1 btn-danger text-white px-4 py-2.5 rounded-xl font-semibold text-sm">
-                        <i class="fa-solid fa-trash mr-1"></i> Ya, Hapus
-                    </button>
+            <div class="flex-1">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold text-slate-700">${escapeHtml(act.description)}</p>
+                  <p class="text-xs text-slate-400 mt-1">
+                    <span class="px-2 py-0.5 ${cfg.bg} ${cfg.color} rounded text-xs font-medium">${cfg.label}</span>
+                    ${act.user ? ' · oleh ' + escapeHtml(act.user) : ''}
+                  </p>
                 </div>
+                <div class="text-right flex-shrink-0">
+                  <div class="text-xs text-slate-500">${time}</div>
+                  <div class="text-xs text-slate-400">${date}</div>
+                </div>
+              </div>
             </div>
-        </div>
-    </div>
+          </div>
+        `;
+      }).join('');
+    }
 
-    <script src="master-admin.js"></script>
+    function clearActivityLog() {
+      if (!confirm('Hapus semua riwayat aktivitas?')) return;
+      masterAdmin.activityLog = [];
+      try { localStorage.removeItem('master_admin_activity_log'); } catch(e) {}
+      renderFullActivityFeed();
+      showToast('Riwayat aktivitas dihapus');
+    }
+
+    // ==========================================
+    // KEYBOARD SHORTCUTS
+    // ==========================================
+
+    document.addEventListener('keydown', (e) => {
+      // Ctrl+K for search
+      if (e.ctrlKey && e.key === 'k') {
+        e.preventDefault();
+        navigateTo('schools');
+        setTimeout(() => {
+          const input = document.getElementById('searchSchoolInput');
+          if (input) input.focus();
+        }, 100);
+      }
+      // Ctrl+R for refresh (prevent default)
+      if (e.ctrlKey && e.key === 'r') {
+        // Allow normal refresh
+      }
+      // Escape to close modal
+      if (e.key === 'Escape') {
+        closeMasterModal();
+      }
+    });
+
+    // ==========================================
+    // INITIALIZATION
+    // ==========================================
+
+    // The masterAdmin.init() is already called from master-admin.js DOMContentLoaded
+  </script>
 </body>
 </html>
