@@ -135,61 +135,22 @@ function doPost(e) {
     }
     
     // E. CRUD Guru
-    // DataGuru structure: NIP, Nama, Role, Telepon, Email, Password, Aktif
     if(req.action === "get_guru") {
       var dataGuruSheet = sheetApp.getSheetByName("DataGuru");
       if(!dataGuruSheet) return ContentService.createTextOutput(JSON.stringify({status:"success", data:[]})).setMimeType(ContentService.MimeType.JSON);
       var data = dataGuruSheet.getDataRange().getValues();
       var result = [];
       for(var i = 1; i < data.length; i++) {
-        if(data[i][0]) result.push({ nip: data[i][0].toString(), nama: data[i][1], role: data[i][2] || "guru", telepon: data[i][3] || "", email: data[i][4] || "", password: data[i][5] || "", aktif: data[i][6] !== "Tidak" });
+        if(data[i][0]) result.push({ nip: data[i][0].toString(), nama: data[i][1], role: data[i][2], telepon: data[i][3], email: data[i][4] });
       }
       return ContentService.createTextOutput(JSON.stringify({status:"success", data:result})).setMimeType(ContentService.MimeType.JSON);
     }
     
     if(req.action === "add_guru") {
       var dataGuruSheet = sheetApp.getSheetByName("DataGuru");
-      if(!dataGuruSheet) {
-        dataGuruSheet = sheetApp.insertSheet("DataGuru");
-        dataGuruSheet.appendRow(["NIP", "Nama", "Role", "Telepon", "Email", "Password", "Aktif"]);
-      }
-      // Cek duplikat NIP
-      var existingData = dataGuruSheet.getDataRange().getValues();
-      for(var i = 1; i < existingData.length; i++) {
-        if(existingData[i][0].toString() === req.data.nip.toString()) {
-          return ContentService.createTextOutput(JSON.stringify({status:"error", msg:"NIP guru sudah ada"})).setMimeType(ContentService.MimeType.JSON);
-        }
-      }
-      dataGuruSheet.appendRow([req.data.nip, req.data.nama, req.data.role||"guru", req.data.telepon||"", req.data.email||"", req.data.password||"123456", req.data.aktif !== false ? "Ya" : "Tidak"]);
+      if(!dataGuruSheet) dataGuruSheet = sheetApp.insertSheet("DataGuru");
+      dataGuruSheet.appendRow([req.nip, req.nama, req.role||"guru", req.telepon||"", req.email||""]);
       return ContentService.createTextOutput(JSON.stringify({status:"success"})).setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    if(req.action === "update_guru") {
-      var dataGuruSheet = sheetApp.getSheetByName("DataGuru");
-      if(!dataGuruSheet) return ContentService.createTextOutput(JSON.stringify({status:"error", msg:"Sheet DataGuru tidak ditemukan"})).setMimeType(ContentService.MimeType.JSON);
-      var data = dataGuruSheet.getDataRange().getValues();
-      for(var i = 1; i < data.length; i++) {
-        if(data[i][0].toString() === req.data.nip.toString()) {
-          var existingPassword = data[i][5] || "";
-          var updatedPassword = req.data.password || existingPassword;
-          dataGuruSheet.getRange(i+1, 1, 1, 7).setValues([[req.data.nip, req.data.nama, req.data.role||"guru", req.data.telepon||"", req.data.email||"", updatedPassword, req.data.aktif !== false ? "Ya" : "Tidak"]]);
-          return ContentService.createTextOutput(JSON.stringify({status:"success"})).setMimeType(ContentService.MimeType.JSON);
-        }
-      }
-      return ContentService.createTextOutput(JSON.stringify({status:"error", msg:"Guru tidak ditemukan"})).setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    if(req.action === "delete_guru") {
-      var dataGuruSheet = sheetApp.getSheetByName("DataGuru");
-      if(!dataGuruSheet) return ContentService.createTextOutput(JSON.stringify({status:"error", msg:"Sheet DataGuru tidak ditemukan"})).setMimeType(ContentService.MimeType.JSON);
-      var data = dataGuruSheet.getDataRange().getValues();
-      for(var i = 1; i < data.length; i++) {
-        if(data[i][0].toString() === req.nip.toString()) {
-          dataGuruSheet.deleteRow(i+1);
-          return ContentService.createTextOutput(JSON.stringify({status:"success"})).setMimeType(ContentService.MimeType.JSON);
-        }
-      }
-      return ContentService.createTextOutput(JSON.stringify({status:"error", msg:"Guru tidak ditemukan"})).setMimeType(ContentService.MimeType.JSON);
     }
     
     // F. Get Pengaturan
@@ -204,23 +165,14 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({status:"success", data:settings})).setMimeType(ContentService.MimeType.JSON);
     }
     
-    // G. Auth (verifikasi login dari DataGuru: NIP=col1, Password=col6, Role=col3)
+    // G. Auth (verifikasi login)
     if(req.action === "auth") {
       var dataGuruSheet = sheetApp.getSheetByName("DataGuru");
       if(!dataGuruSheet) return ContentService.createTextOutput(JSON.stringify({status:"error", msg:"Data guru belum ada"})).setMimeType(ContentService.MimeType.JSON);
       var data = dataGuruSheet.getDataRange().getValues();
       for(var i = 1; i < data.length; i++) {
-        if(data[i][0].toString() === req.nip && String(data[i][5]) === String(req.password)) {
-          // Check aktif status (column 7)
-          if(data[i][6] === "Tidak") {
-            return ContentService.createTextOutput(JSON.stringify({status:"error", msg:"Akun dinonaktifkan"})).setMimeType(ContentService.MimeType.JSON);
-          }
-          return ContentService.createTextOutput(JSON.stringify({
-            status:"success", user: {
-              nama: data[i][1], nip: data[i][0].toString(), role: data[i][2] || "guru",
-              telepon: data[i][3] || "", email: data[i][4] || "", aktif: true
-            }
-          })).setMimeType(ContentService.MimeType.JSON);
+        if(data[i][0].toString() === req.nip && data[i][5] === req.password) {
+          return ContentService.createTextOutput(JSON.stringify({status:"success", nama:data[i][1], nip:data[i][0], role:data[i][2]})).setMimeType(ContentService.MimeType.JSON);
         }
       }
       return ContentService.createTextOutput(JSON.stringify({status:"not_found"})).setMimeType(ContentService.MimeType.JSON);
@@ -275,52 +227,72 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({status:"not_found"})).setMimeType(ContentService.MimeType.JSON);
     }
     
-    // K. Get Absensi by date range (for rekap)
-    if(req.action === "get_absensi") {
+    // K. Batch Absen Guru - Teacher submits attendance for entire class
+    if(req.action === "batch_absen_guru") {
       var logSheet = sheetApp.getSheetByName("LogAbsen");
-      if(!logSheet) return ContentService.createTextOutput(JSON.stringify({status:"success", data:[]})).setMimeType(ContentService.MimeType.JSON);
-      var data = logSheet.getDataRange().getValues();
-      var result = [];
-      var dari = req.dari || "";
-      var sampai = req.sampai || "";
-      for(var i = 1; i < data.length; i++) {
-        var tgl = data[i][0] instanceof Date ? Utilities.formatDate(data[i][0], "Asia/Jakarta", "yyyy-MM-dd") : String(data[i][0]);
-        if(dari && tgl < dari) continue;
-        if(sampai && tgl > sampai) continue;
-        result.push({
-          id: "abs_" + i + "_" + Date.now(),
-          tanggal: tgl, nis: String(data[i][1] || ""), nama: data[i][2] || "",
-          kelas: data[i][3] || "", waktuMasuk: data[i][4] || "", status: String(data[i][5] || "").toUpperCase(),
-          keterangan: data[i][6] || ""
-        });
+      var tanggal = req.tanggal || new Date().toLocaleDateString('id-ID');
+      var dataBatch = req.data;
+      var results = { success: 0, failed: 0, waSent: 0 };
+      
+      for(var i = 0; i < dataBatch.length; i++) {
+        var item = dataBatch[i];
+        try {
+          var sMatch = findSiswa(sheetApp, item.nis);
+          var nama = sMatch ? sMatch.nama : (item.nama || "Tidak Dikenal");
+          var kelas = sMatch ? sMatch.kelas : (item.kelas || "-");
+          var telpOrtu = sMatch ? sMatch.telpOrtu : "";
+          
+          // Check if already exists for this date+NIS
+          var existingData = logSheet.getDataRange().getValues();
+          var found = false;
+          for(var j = 1; j < existingData.length; j++) {
+            if(existingData[j][0] === tanggal && existingData[j][1].toString() === item.nis.toString()) {
+              // Update existing record
+              logSheet.getRange(j+1, 5, 1, 3).setValues([[item.waktu || "-", item.status, item.keterangan || "-"]]);
+              found = true;
+              break;
+            }
+          }
+          
+          if(!found) {
+            logSheet.appendRow([tanggal, item.nis, nama, kelas, item.waktu || "-", item.status, item.keterangan || "-"]);
+          }
+          
+          results.success++;
+          
+          // Send WA notification (trigger WA API)
+          if(req.sendWa === true && item.status) {
+            var waSent = sendWaNotificationGuru(nama, kelas, tanggal, item.status, item.keterangan, telpOrtu);
+            if(waSent) results.waSent++;
+          }
+        } catch(e) {
+          results.failed++;
+        }
       }
-      return ContentService.createTextOutput(JSON.stringify({status:"success", data:result})).setMimeType(ContentService.MimeType.JSON);
+      
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        results: results
+      })).setMimeType(ContentService.MimeType.JSON);
     }
     
-    // L. Export Rekap (monthly recap summary)
-    if(req.action === "export_rekap") {
+    // L. Get attendance records by date and class
+    if(req.action === "get_absen_kelas") {
       var logSheet = sheetApp.getSheetByName("LogAbsen");
-      if(!logSheet) return ContentService.createTextOutput(JSON.stringify({status:"success", data:[]})).setMimeType(ContentService.MimeType.JSON);
       var data = logSheet.getDataRange().getValues();
-      var dari = req.dari || "";
-      var sampai = req.sampai || "";
-      var rekapMap = {};
-      for(var i = 1; i < data.length; i++) {
-        var tgl = data[i][0] instanceof Date ? Utilities.formatDate(data[i][0], "Asia/Jakarta", "yyyy-MM-dd") : String(data[i][0]);
-        if(dari && tgl < dari) continue;
-        if(sampai && tgl > sampai) continue;
-        var nis = String(data[i][1] || "");
-        var status = String(data[i][5] || "").toUpperCase();
-        if(!rekapMap[nis]) rekapMap[nis] = { nis: nis, nama: data[i][2]||"", kelas: data[i][3]||"", hadir:0, terlambat:0, izin:0, sakit:0, alfa:0, pulang:0 };
-        if(status.includes("TERLAMBAT")) rekapMap[nis].terlambat++;
-        else if(status.includes("HADIR")) rekapMap[nis].hadir++;
-        else if(status.includes("PULANG")) rekapMap[nis].pulang++;
-        else if(status.includes("IZIN")) rekapMap[nis].izin++;
-        else if(status.includes("SAKIT")) rekapMap[nis].sakit++;
-        else rekapMap[nis].alfa++;
-      }
       var result = [];
-      for(var key in rekapMap) result.push(rekapMap[key]);
+      var tanggal = req.tanggal;
+      var kelas = req.kelas;
+      
+      for(var i = 1; i < data.length; i++) {
+        if(data[i][0] === tanggal && data[i][3] === kelas) {
+          result.push({
+            tanggal: data[i][0], nis: data[i][1].toString(), nama: data[i][2],
+            kelas: data[i][3], waktu: data[i][4], status: data[i][5], keterangan: data[i][6]
+          });
+        }
+      }
+      
       return ContentService.createTextOutput(JSON.stringify({status:"success", data:result})).setMimeType(ContentService.MimeType.JSON);
     }
     
@@ -378,6 +350,92 @@ function sendWaNotification(siswa, waktu, status) {
   } catch(e) {
     Logger.log("WA send error: " + e.toString());
   }
+}
+
+// ===== WA NOTIFICATION FOR TEACHER ATTENDANCE =====
+function sendWaNotificationGuru(nama, kelas, tanggal, status, keterangan, telpOrtu) {
+  var settingsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Pengaturan");
+  if(!settingsSheet) return false;
+  var data = settingsSheet.getDataRange().getValues();
+  var settings = {};
+  for(var i = 1; i < data.length; i++) {
+    if(data[i][0]) settings[data[i][0]] = data[i][1];
+  }
+  
+  // Cek apakah WA aktif
+  if(settings['waEnable'] !== 'true') return false;
+  
+  var waApiUrl = settings['waApiUrl'] || '';
+  var waApiKey = settings['waApiKey'] || '';
+  var waDeviceId = settings['waDeviceId'] || '';
+  
+  // Jika tidak ada WA API config, cek WA admin lama
+  if(!waApiUrl && !waApiKey) {
+    var waAdmin = settings['waAdmin'];
+    if(!waAdmin) return false;
+    // Legacy: gunakan WA admin
+    Logger.log("WA notification (legacy) for: " + nama + " status: " + status);
+    return true;
+  }
+  
+  // Tentukan pesan berdasarkan status
+  var pesan = "";
+  var statusLower = status.toString().toUpperCase();
+  
+  if(statusLower === "HADIR") {
+    pesan = (settings['waMasuk'] || "Assalamualaikum, Ananda *[NAMA]* ([KELAS]) telah HADIR di sekolah pada [TANGGAL]. Terima kasih.");
+  } else if(statusLower === "SAKIT") {
+    pesan = "Assalamualaikum, Ananda *[NAMA]* ([KELAS]) hari ini SAKIT" + (keterangan ? ". Ket: " + keterangan : "") + ". Mohon istirahat yang cukup.";
+  } else if(statusLower === "IZIN") {
+    pesan = "Assalamualaikum, Ananda *[NAMA]* ([KELAS]) hari ini IZIN" + (keterangan ? ". Ket: " + keterangan : "") + ". Terima kasih konfirmasinya.";
+  } else if(statusLower === "ALFA") {
+    pesan = "Assalamualaikum, Ananda *[NAMA]* ([KELAS]) hari ini TIDAK HADIR (ALFA) pada [TANGGAL]. Mohon konfirmasi ke pihak sekolah.";
+  } else if(statusLower === "TERLAMBAT") {
+    pesan = (settings['waTelat'] || "Assalamualaikum, Ananda *[NAMA]* ([KELAS]) hari ini TERLAMBAT masuk sekolah. Mohon perhatian.");
+  }
+  
+  if(!pesan) return false;
+  
+  // Replace placeholders
+  pesan = pesan.replace("[NAMA]", nama).replace("[KELAS]", kelas).replace("[TANGGAL]", tanggal);
+  if(keterangan) pesan = pesan.replace("[KETERANGAN]", keterangan);
+  
+  // Kirim ke orang tua
+  var targetPhone = telpOrtu;
+  if(!targetPhone || targetPhone.length < 10) return false;
+  
+  // Format phone number (add 62 prefix if starts with 0)
+  if(targetPhone.startsWith("0")) targetPhone = "62" + targetPhone.substring(1);
+  
+  try {
+    // Kirim via WA API (FONNTE compatible)
+    if(waApiUrl && waApiKey) {
+      var payload = {
+        target: targetPhone,
+        message: pesan
+      };
+      if(waDeviceId) payload.deviceId = waDeviceId;
+      
+      var headers = {
+        "Authorization": waApiKey,
+        "Content-Type": "application/json"
+      };
+      
+      UrlFetchApp.fetch(waApiUrl, {
+        method: "POST",
+        headers: headers,
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      });
+      
+      Logger.log("WA sent to " + targetPhone + " for " + nama + " [" + status + "]");
+      return true;
+    }
+  } catch(e) {
+    Logger.log("WA send error for " + nama + ": " + e.toString());
+  }
+  
+  return false;
 }
 
 // ===== GET Handler (untuk doGET - cek status) =====
