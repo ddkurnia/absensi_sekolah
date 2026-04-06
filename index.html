@@ -740,7 +740,7 @@
             <div id="tab-gdrive" class="settings-tab hidden">
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-4">
                     <h3 class="text-lg font-bold text-slate-700 mb-4 flex items-center"><i class="fa-brands fa-google-drive text-primary-500 mr-2"></i> Integrasi Google Drive</h3>
-                    <p class="text-sm text-slate-500 mb-6">Hubungkan akun Google Drive untuk menyimpan data absensi secara otomatis ke Google Spreadsheet. Tidak perlu lagi memasukkan URL secara manual.</p>
+                    <p class="text-sm text-slate-500 mb-6">Hubungkan akun Google Drive Anda secara otomatis. Sistem akan langsung membuat Spreadsheet, tabel data siswa, guru, absensi, dan semua file pendukung di Google Drive Anda.</p>
                     
                     <!-- Connection Status -->
                     <div id="gdriveStatus" class="mb-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
@@ -755,56 +755,112 @@
                         </div>
                     </div>
                     
-                    <!-- Connection Section -->
+                    <!-- Connect Section (shown when not connected) -->
                     <div id="gdriveConnectSection">
-                        <div class="space-y-4">
-                            <!-- Step 1: Deploy Apps Script -->
-                            <div class="p-4 rounded-xl bg-primary-50 border border-primary-100">
-                                <h4 class="text-sm font-bold text-primary-700 mb-2"><i class="fa-solid fa-1 mr-2 w-5 h-5 bg-primary-600 text-white rounded-full inline-flex items-center justify-center text-xs"></i>Deploy Google Apps Script</h4>
-                                <ol class="text-xs text-primary-600 space-y-1 ml-7 list-decimal">
-                                    <li>Buka <a href="https://script.google.com" target="_blank" class="underline font-semibold">script.google.com</a></li>
-                                    <li>Buat proyek baru</li>
-                                    <li>Salin kode dari file <code class="bg-primary-100 px-1 rounded">code.txt</code> ke editor</li>
-                                    <li>Deploy sebagai <strong>Web App</strong> (Execute as: Me, Access: Anyone)</li>
-                                </ol>
-                            </div>
-                            
-                            <!-- Step 2: Paste URL -->
-                            <div class="p-4 rounded-xl bg-amber-50 border border-amber-100">
-                                <h4 class="text-sm font-bold text-amber-700 mb-2"><i class="fa-solid fa-2 mr-2 w-5 h-5 bg-amber-600 text-white rounded-full inline-flex items-center justify-center text-xs"></i>Masukkan URL Web App</h4>
-                                <div class="mt-3">
-                                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">URL Web App (dari hasil deploy)</label>
-                                    <input type="url" id="gdriveGasUrl" placeholder="https://script.google.com/macros/s/xxxxx/exec" class="w-full p-3 border border-slate-200 rounded-xl input-modern text-sm">
+                        <div class="p-5 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100">
+                            <div class="text-center">
+                                <div class="w-16 h-16 bg-white rounded-2xl shadow-md flex items-center justify-center mx-auto mb-4">
+                                    <i class="fa-brands fa-google text-3xl text-primary-600"></i>
                                 </div>
-                                <div class="mt-3">
-                                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">ID Spreadsheet (opsional - untuk referensi)</label>
-                                    <input type="text" id="gdriveSheetId" placeholder="https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit" class="w-full p-3 border border-slate-200 rounded-xl input-modern text-sm">
+                                <h4 class="text-base font-bold text-slate-700 mb-2">Hubungkan dengan Google Drive</h4>
+                                <p class="text-xs text-slate-500 mb-4 max-w-sm mx-auto">Klik tombol di bawah untuk login ke akun Google Anda. Sistem akan otomatis membuat semua file Spreadsheet yang dibutuhkan.</p>
+                                
+                                <!-- Google Sign-In Button -->
+                                <div id="googleSignInBtn" class="inline-flex items-center justify-center gap-2 bg-white border border-slate-200 hover:shadow-md hover:border-primary-300 text-slate-700 px-6 py-3 rounded-xl font-semibold text-sm cursor-pointer transition-all duration-200 active:scale-95" onclick="initGoogleSignIn()">
+                                    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                                    <span>Masuk dengan Google</span>
+                                </div>
+                                
+                                <!-- Loading state -->
+                                <div id="googleAuthLoading" class="hidden mt-4">
+                                    <div class="flex items-center justify-center gap-2 text-primary-600">
+                                        <i class="fa-solid fa-spinner fa-spin"></i>
+                                        <span class="text-sm font-medium" id="googleAuthLoadingText">Menghubungkan ke Google...</span>
+                                    </div>
                                 </div>
                             </div>
                             
-                            <!-- Step 3: Test & Save -->
-                            <div class="p-4 rounded-xl bg-green-50 border border-green-100">
-                                <h4 class="text-sm font-bold text-green-700 mb-2"><i class="fa-solid fa-3 mr-2 w-5 h-5 bg-green-600 text-white rounded-full inline-flex items-center justify-center text-xs"></i>Simpan & Uji Koneksi</h4>
-                                <div class="flex gap-3 mt-3">
-                                    <button onclick="saveGoogleDriveConfig()" class="flex-1 btn-primary text-white px-4 py-2.5 rounded-xl text-sm font-semibold">
-                                        <i class="fa-solid fa-link mr-1.5"></i> Hubungkan
-                                    </button>
-                                    <button onclick="testGoogleDriveConnection()" class="flex-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-semibold transition">
-                                        <i class="fa-solid fa-plug mr-1.5"></i> Test Koneksi
-                                    </button>
+                            <!-- Info boxes -->
+                            <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div class="bg-white/80 rounded-lg p-3 text-center">
+                                    <i class="fa-solid fa-file-excel text-green-500 text-lg mb-1"></i>
+                                    <p class="text-xs font-semibold text-slate-600">Auto Spreadsheet</p>
+                                    <p class="text-[10px] text-slate-400">File otomatis dibuat</p>
+                                </div>
+                                <div class="bg-white/80 rounded-lg p-3 text-center">
+                                    <i class="fa-solid fa-table text-blue-500 text-lg mb-1"></i>
+                                    <p class="text-xs font-semibold text-slate-600">5 Sheet Data</p>
+                                    <p class="text-[10px] text-slate-400">Absensi, Siswa, Kelas, Guru, Setting</p>
+                                </div>
+                                <div class="bg-white/80 rounded-lg p-3 text-center">
+                                    <i class="fa-solid fa-arrows-rotate text-purple-500 text-lg mb-1"></i>
+                                    <p class="text-xs font-semibold text-slate-600">Sync Otomatis</p>
+                                    <p class="text-[10px] text-slate-400">Data langsung tersinkronisasi</p>
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- Manual setup option (collapsed) -->
+                        <details class="mt-4">
+                            <summary class="text-xs text-slate-400 cursor-pointer hover:text-slate-600 transition">
+                                <i class="fa-solid fa-gear mr-1"></i> Opsi Lanjutan (Setup Manual)
+                            </summary>
+                            <div class="mt-3 p-4 rounded-xl bg-amber-50 border border-amber-100">
+                                <p class="text-xs text-amber-700 font-semibold mb-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Mode Manual - Hanya untuk pengguna advanced</p>
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">URL Web App (Google Apps Script)</label>
+                                        <input type="url" id="gdriveGasUrlManual" placeholder="https://script.google.com/macros/s/xxxxx/exec" class="w-full p-2.5 border border-slate-200 rounded-lg input-modern text-xs">
+                                    </div>
+                                    <button onclick="saveGoogleDriveManual()" class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-xs font-semibold transition">
+                                        <i class="fa-solid fa-link mr-1"></i> Simpan Manual
+                                    </button>
+                                </div>
+                            </div>
+                        </details>
                     </div>
                     
-                    <!-- Disconnect Section (hidden by default) -->
+                    <!-- Connected Section (shown when connected) -->
                     <div id="gdriveDisconnectSection" class="hidden">
-                        <div class="p-4 rounded-xl bg-red-50 border border-red-100">
-                            <p class="text-sm text-red-700 font-semibold mb-3">Putuskan koneksi Google Drive?</p>
-                            <p class="text-xs text-red-600 mb-3">Data absensi akan tersimpan secara lokal saja. Sinkronisasi otomatis akan dinonaktifkan.</p>
-                            <button onclick="disconnectGoogleDrive()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">
-                                <i class="fa-solid fa-link-slash mr-1.5"></i> Putuskan Koneksi
-                            </button>
+                        <div class="space-y-3">
+                            <div class="p-4 rounded-xl bg-green-50 border border-green-100">
+                                <div class="flex items-center gap-3 mb-3">
+                                    <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                        <i class="fa-solid fa-check text-green-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-bold text-green-700">Google Drive Terhubung</p>
+                                        <p class="text-xs text-green-600" id="gdriveConnectedInfo">-</p>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 text-xs">
+                                    <div class="bg-white/80 rounded-lg p-2.5">
+                                        <p class="text-slate-400">Akun Google</p>
+                                        <p class="font-semibold text-slate-700 truncate" id="gdriveAccount">-</p>
+                                    </div>
+                                    <div class="bg-white/80 rounded-lg p-2.5">
+                                        <p class="text-slate-400">Terhubung Sejak</p>
+                                        <p class="font-semibold text-slate-700" id="gdriveConnectedDate">-</p>
+                                    </div>
+                                    <div class="bg-white/80 rounded-lg p-2.5">
+                                        <p class="text-slate-400">Spreadsheet ID</p>
+                                        <p class="font-mono text-xs text-slate-600 truncate" id="gdriveSheetIdDisplay">-</p>
+                                    </div>
+                                    <div class="bg-white/80 rounded-lg p-2.5">
+                                        <p class="text-slate-400">Status Sync</p>
+                                        <p class="font-semibold text-green-600" id="gdriveSyncStatus"><i class="fa-solid fa-circle text-[8px] mr-1"></i>Aktif</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex gap-3">
+                                <button onclick="syncToGoogleDrive()" class="flex-1 btn-primary text-white px-4 py-2.5 rounded-xl text-sm font-semibold">
+                                    <i class="fa-solid fa-arrows-rotate mr-1.5"></i> Sync Sekarang
+                                </button>
+                                <button onclick="disconnectGoogleDrive()" class="bg-red-50 border border-red-200 hover:bg-red-100 text-red-600 px-4 py-2.5 rounded-xl text-sm font-semibold transition">
+                                    <i class="fa-solid fa-link-slash mr-1.5"></i> Putuskan
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
