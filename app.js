@@ -1371,9 +1371,12 @@ window.initGoogleSignIn = async function() {
         await loadFirebaseSDK(firebaseConfig);
         console.log('[GoogleSignIn] Firebase SDK loaded successfully');
         
-        // Double-check firebase.auth is available
+        // Double-check firebase.auth and GoogleAuthProvider are available
         if (typeof firebase === 'undefined' || !firebase.auth) {
-            throw new Error('Firebase Auth SDK gagal dimuat. Pastikan tidak ada extension browser yang memblokir script dari gstatic.com');
+            throw new Error('Firebase Auth SDK gagal dimuat. Coba refresh halaman (Ctrl+F5).');
+        }
+        if (!firebase.auth.GoogleAuthProvider) {
+            throw new Error('GoogleAuthProvider tidak tersedia. Coba refresh halaman (Ctrl+F5) atau matikan extension browser.');
         }
         
         // Step 3: Sign in with Google using Firebase Auth popup
@@ -1469,64 +1472,43 @@ function getFirebaseConfig() {
     }
 }
 
-/**
- * Dynamically load Firebase SDKs
+ /**
+ * Initialize Firebase App with config from Master Admin
+ * Firebase SDK scripts are pre-loaded in index.html
  */
-let _firebaseSDKLoaded = false;
+let _firebaseInitialized = false;
 
 async function loadFirebaseSDK(config) {
-    // Jika sudah pernah load lengkap, skip
-    if (_firebaseSDKLoaded && window.firebase && firebase.apps && firebase.apps.length > 0 && firebase.auth) {
+    if (_firebaseInitialized && window.firebase && firebase.apps && firebase.apps.length > 0 && firebase.auth) {
+        console.log('[Firebase] Already initialized, skipping');
         return;
     }
-    _firebaseSDKLoaded = false;
 
-    return new Promise((resolve, reject) => {
-        // Cek apakah firebase-app sudah ada di halaman
-        function loadScript(url, isModule) {
-            return new Promise((res, rej) => {
-                // Cek apakah script sudah ada
-                const existing = document.querySelector('script[src="' + url + '"]');
-                if (existing) { res(); return; }
-                const s = document.createElement('script');
-                s.src = url;
-                s.onload = res;
-                s.onerror = () => rej(new Error('Gagal memuat: ' + url));
-                document.head.appendChild(s);
-            });
+    if (typeof firebase === 'undefined') {
+        throw new Error('Firebase SDK tidak ditemukan. Coba refresh halaman (Ctrl+F5).');
+    }
+    if (!firebase.auth) {
+        throw new Error('Firebase Auth SDK tidak tersedia. Coba refresh halaman (Ctrl+F5).');
+    }
+    if (!firebase.auth.GoogleAuthProvider) {
+        throw new Error('GoogleAuthProvider tidak tersedia. Coba refresh halaman (Ctrl+F5).');
+    }
+
+    try {
+        if (!firebase.apps || firebase.apps.length === 0) {
+            firebase.initializeApp(config);
+            console.log('[Firebase] App initialized for project:', config.projectId);
+        } else {
+            console.log('[Firebase] App already initialized');
         }
-
-        loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js')
-            .then(() => {
-                console.log('[Firebase] firebase-app loaded');
-                return loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js');
-            })
-            .then(() => {
-                console.log('[Firebase] firebase-auth loaded');
-                // Verifikasi firebase.auth tersedia
-                if (!firebase.auth) {
-                    reject(new Error('Firebase Auth SDK tidak tersedia. Pastikan koneksi internet stabil.'));
-                    return;
-                }
-                try {
-                    if (!firebase.apps || firebase.apps.length === 0) {
-                        firebase.initializeApp(config);
-                        console.log('[Firebase] App initialized for project:', config.projectId);
-                    }
-                    _firebaseSDKLoaded = true;
-                    resolve();
-                } catch(e) {
-                    if (e.code === 'app/duplicate-app') {
-                        // Sudah di-initialize, itu ok
-                        _firebaseSDKLoaded = true;
-                        resolve();
-                    } else {
-                        reject(e);
-                    }
-                }
-            })
-            .catch(err => reject(err));
-    });
+        _firebaseInitialized = true;
+    } catch(e) {
+        if (e.code === 'app/duplicate-app') {
+            _firebaseInitialized = true;
+        } else {
+            throw e;
+        }
+    }
 }
 
 /**
