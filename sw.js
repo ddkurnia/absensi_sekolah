@@ -1,56 +1,112 @@
-const CACHE_NAME = 'smart-absen-v4';
-const urlsToCache = [
+/**
+ * ============================================================
+ *  SMART ABSEN ENTERPRISE v2.0 — SERVICE WORKER
+ * ============================================================
+ */
+
+const CACHE_NAME = 'smart-absen-v2';
+const ASSETS = [
+  './',
   './index.html',
   './app.js',
-  './manifest.json',
+  './absen.html',
+  './absen.js',
   './master-admin.html',
   './master-admin.js',
-  'https://cdn.tailwindcss.com',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-  'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js',
-  'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap',
-  'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js',
-  'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js',
-  'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js'
+  './config.js',
+  './manifest.json',
 ];
 
-self.addEventListener('install', event => {
+// Install — cache semua aset utama
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+    caches.open(CACHE_NAME)
+      .then(cache => {
+        console.log('[SW] Caching app assets...');
+        return cache.addAll(ASSETS);
+      })
+      .then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
-self.addEventListener('activate', event => {
+// Activate — bersihkan cache lama
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(keys => Promise.all(
-      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-    ))
+    caches.keys()
+      .then(keys => {
+        return Promise.all(
+          keys.filter(key => key !== CACHE_NAME)
+            .map(key => caches.delete(key))
+        );
+      })
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-self.addEventListener('fetch', event => {
+// Fetch — Network first, fallback to cache
+self.addEventListener('fetch', (event) => {
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') return;
+
+  // Skip Google API & Firebase requests (harus selalu fresh)
+  const url = event.request.url;
+  if (url.includes('googleapis.com') || 
+      url.includes('firebaseio.com') || 
+      url.includes('google.com')) {
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      return cached || fetch(event.request).then(response => {
-        // Cache dynamic resources
-        if(response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
+    fetch(event.request)
+      .then(response => {
+        // Cache respons berhasil
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then(cache => {
+          cache.put(event.request, responseClone);
+        });
         return response;
-      });
-    }).catch(() => {
-      // Offline fallback
-      if(event.request.mode === 'navigate') {
-        const url = new URL(event.request.url);
-        if (url.pathname.includes('master-admin')) {
-          return caches.match('./master-admin.html');
-        }
-        return caches.match('./index.html');
-      }
-    })
+      })
+      .catch(() => {
+        // Fallback ke cache jika offline
+        return caches.match(event.request);
+      })
+  );
+});
+
+// Background sync untuk offline queue
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-attendance') {
+    event.waitUntil(syncAttendanceData());
+  }
+});
+
+async function syncAttendanceData() {
+  // Notifikasi semua client untuk sync
+  const clients = await self.clients.matchAll();
+  clients.forEach(client => {
+    client.postMessage({ type: 'SYNC_ATTENDANCE' });
+  });
+}
+
+// Push notification handler
+self.addEventListener('push', (event) => {
+  const data = event.data ? event.data.json() : {};
+  const options = {
+    body: data.body || 'Ada notifikasi baru dari Smart Absen',
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    vibrate: [200, 100, 200],
+    data: data.data || {},
+    actions: data.actions || [],
+  };
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Smart Absen', options)
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.openWindow('./absen.html')
   );
 });
